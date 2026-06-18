@@ -1220,10 +1220,10 @@
       <h1>Masuk</h1>
       <p class="sub">Masuk untuk membuka area member MICRONE.</p>
       <div class="field"><label>Email</label><input type="email" id="loginEmail" placeholder="nama@email.com" value="microone25@gmail.com"></div>
-      <div class="field"><label>Kata Sandi</label><input type="password" id="loginPass" placeholder="********" value="demo1234"></div>
+      <div class="field"><label>Kata Sandi</label><input type="password" id="loginPass" placeholder="Masukkan kata sandi" value=""></div>
       <div class="login-row"><label style="display:flex;align-items:center;gap:8px;color:var(--text);cursor:pointer"><input type="checkbox" checked style="accent-color:#1F3D73"> Ingat saya</label><a>Lupa sandi?</a></div>
       <div class="login-track-btns" id="demoBtns">
-        <button class="btn btn-primary btn-wide" onclick="enterDemo('saham')">Masuk</button>
+        <button class="btn btn-primary btn-wide" onclick="tryLogin()">Masuk</button><div id="loginErr" style="display:none;color:#C2422F;font-size:12.5px;text-align:center;margin-top:10px;font-weight:600">Email atau kata sandi salah. Coba lagi.</div>
       </div>
       <div id="realAuthBtns" style="display:none">
         <button class="btn btn-primary btn-wide" onclick="apiLogin()">Masuk</button>
@@ -1427,7 +1427,7 @@ var PLANS={
   '6bulan':{name:'Paket 6 Bulan',sub:'Akses penuh 180 hari',price:449000,old:720000,disc:'38%'},
   'lifetime':{name:'Lifetime Member',sub:'Akses tanpa batas waktu',price:1290000,old:3500000,disc:'63%'}
 };
-var coState={step:1,planKey:null,method:null,track:'saham',broker:null,buyer:{nama:'',email:'',wa:''},va:''};
+var coState={step:1,planKey:null,method:null,track:'saham',broker:null,extra15:false,buyer:{nama:'',email:'',wa:''},va:''};
 
 /* ===== Broker / mitra resmi (silakan ganti link/aturan sesuai kebutuhan) ===== */
 var BROKERS={
@@ -1495,6 +1495,8 @@ function pickTrack(key,track){
   if(key==='demo'){enterDemo(track);}
   else{openCheckout(key,track);}
 }
+var DEMO_EMAIL='microone25@gmail.com',DEMO_PASS='demo1234';
+function tryLogin(){var em=((document.getElementById('loginEmail')||{}).value||'').trim().toLowerCase();var pw=((document.getElementById('loginPass')||{}).value||'');var err=document.getElementById('loginErr');if(em===DEMO_EMAIL&&pw===DEMO_PASS){if(err)err.style.display='none';enterDemo('saham');}else{if(err)err.style.display='block';}}
 function enterDemo(track){
   setMemberTrack(track);
   showScreen('app');showView('dashboard');
@@ -1530,7 +1532,7 @@ function setMemberTrack(track){
 }
 
 function openCheckout(key,track){
-  coState.step=1;coState.planKey=key;coState.method=null;coState.track=track||'saham';coState.broker=((BROKERS[coTrack()]||[])[0]||{}).id||null;coState.buyer={nama:'',email:'',wa:''};
+  coState.step=1;coState.planKey=key;coState.method=null;coState.extra15=false;coState.track=track||'saham';coState.broker=((BROKERS[coTrack()]||[])[0]||{}).id||null;coState.buyer={nama:'',email:'',wa:''};
   coState.va='8808 '+Math.floor(100000+Math.random()*899999);
   showScreen('checkout');renderCheckout();window.scrollTo(0,0);
 }
@@ -1560,8 +1562,9 @@ function checkoutPay(){
   setTimeout(function(){coState.step=4;renderCheckout();window.scrollTo(0,0);},1700);
 }
 function finishCheckout(){setMemberTrack(coState.track);showScreen('app');showView('dashboard');}
+function coFinalPrice(p){return coState.extra15?(p.price-Math.round(p.price*0.15)):p.price;}
 function sumHTML(p){
-  var save=p.old-p.price;
+  var save=p.old-p.price;var fin=coFinalPrice(p);var x15=p.price-fin;var totsave=p.old-fin;
   var bn=brokerName();
   var brokerRow=coState.broker==='self'
     ? '<div class="co-sum-row"><span>Broker mitra</span><span style="font-size:12.5px;color:var(--muted)">Pakai sendiri</span></div>'
@@ -1570,9 +1573,9 @@ function sumHTML(p){
     '<div class="co-sum-row"><span>'+p.name+'</span><span class="mono">'+formatRupiah(p.old)+'</span></div>'+
     '<div class="co-sum-row"><span>Kelas</span><span class="track-pill '+coState.track+'" style="padding:2px 9px">'+TRACK_LABEL[coState.track]+'</span></div>'+
     brokerRow+
-    '<div class="co-sum-row"><span>Diskon '+p.disc+'</span><span class="mono" style="color:var(--coral)">-'+formatRupiah(save)+'</span></div>'+
-    '<div class="co-sum-row total"><span>Total</span><span class="mono">'+formatRupiah(p.price)+'</span></div>'+
-    '<span class="co-badge">Hemat '+formatRupiah(save)+'</span>'+
+    '<div class="co-sum-row"><span>Diskon '+p.disc+'</span><span class="mono" style="color:var(--coral)">-'+formatRupiah(save)+'</span></div>'+(coState.extra15?'<div class="co-sum-row"><span>Diskon tambahan 15% (broker)</span><span class="mono" style="color:var(--coral)">-'+formatRupiah(x15)+'</span></div>':'')+
+    '<div class="co-sum-row total"><span>Total</span><span class="mono">'+formatRupiah(fin)+'</span></div>'+
+    '<span class="co-badge">Hemat '+formatRupiah(totsave)+'</span>'+
     '<p style="font-size:12px;color:var(--muted);margin-top:14px;line-height:1.5">Akses kelas '+TRACK_LABEL[coState.track]+': fasilitas, grup WhatsApp, dan Telegram menyesuaikan kelas ini.</p>';
 }
 function coLine(t){return '<div style="display:flex;gap:10px;align-items:flex-start;font-size:14.5px;color:var(--text)"><svg viewBox="0 0 24 24" fill="none" stroke="#13A06A" stroke-width="2.6" width="18" height="18" style="flex:none;margin-top:2px"><path d="M20 6 9 17l-5-5"/></svg>'+t+'</div>';}
@@ -1642,7 +1645,7 @@ function renderCheckout(){
       payOpt('ewallet','E-Wallet','GoPay, OVO, DANA, ShopeePay','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M16 12h.01M2 10h20"/></svg>')+
       payDetail()+
       '<p id="payHint" style="display:none;color:var(--coral);font-size:13px;margin-top:10px;font-weight:600">Silakan pilih salah satu metode pembayaran.</p>'+
-      '<div class="co-actions"><button class="btn btn-ghost" onclick="checkoutPrev()">Kembali</button><button class="btn btn-primary" onclick="checkoutPay()">Bayar '+formatRupiah(p.price)+'</button></div></div><div class="co-summary">'+sumHTML(p)+'</div></div>';
+      '<div class="co-actions"><button class="btn btn-ghost" onclick="checkoutPrev()">Kembali</button><button class="btn btn-primary" onclick="checkoutPay()">Bayar '+formatRupiah(coFinalPrice(p))+'</button></div></div><div class="co-summary">'+sumHTML(p)+'</div></div>';
   }else{
     var oid='MCR-'+Date.now().toString().slice(-6);
     var bn2=brokerName();
@@ -2581,7 +2584,7 @@ function goSeg(i){if(i===cur)return;cur=i;var navIdx=SEG[i].nav,sideEl=document.
     if(!id||!id.value.trim()){if(res){res.className='bpres err';res.textContent='Isi Nama / ID akun broker dulu.';}return;}
     if(!ok||!ok.checked){if(res){res.className='bpres err';res.textContent='Centang persetujuan dulu agar bisa divalidasi otomatis.';}return;}
     if(btn){btn.disabled=true;btn.textContent='Memvalidasi ke sistem broker\u2026';}
-    setTimeout(function(){if(btn)btn.style.display='none';if(res){res.className='bpres ok';res.innerHTML='&#10003; Tervalidasi otomatis. Akun '+id.value+' cocok sebagai referral &mdash; potongan tambahan 15% diterapkan pada paket ini.';}},1100);
+    setTimeout(function(){if(btn)btn.style.display='none';if(res){res.className='bpres ok';res.innerHTML='&#10003; Tervalidasi otomatis. Akun '+id.value+' cocok sebagai referral &mdash; potongan tambahan 15% diterapkan pada paket ini.';}coState.extra15=true;var _cs=document.querySelector('.co-summary');if(_cs&&typeof PLANS!=='undefined'&&PLANS[coState.planKey])_cs.innerHTML=sumHTML(PLANS[coState.planKey]);},1100);
   };
   window.w25Toast=function(msg){var t=document.createElement('div');t.className='w25-toast';t.textContent=msg;document.body.appendChild(t);requestAnimationFrame(function(){t.classList.add('show');});setTimeout(function(){t.classList.remove('show');setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},320);},3200);};
   window.replyPost=function(btn){
@@ -2745,5 +2748,64 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
 .w25-toast::before{content:"";width:8px;height:8px;border-radius:50%;background:#E6C36A;flex:none}
 .w25-toast.show{opacity:1;transform:translate(-50%,0)}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* ===== Sambungan Supabase: login & daftar asli ===== */
+(function(){
+  var SB_URL='https://bljwcdefucjketiyeisi.supabase.co';
+  var SB_KEY='sb_publishable_qVNFQ5cNsCZQmfm7IufbJg_OapCyy4K';
+  var sbc=null, mode='login';
+  function init(){ try{ if(window.supabase&&window.supabase.createClient){ sbc=window.supabase.createClient(SB_URL,SB_KEY); } }catch(e){} }
+  function msg(t,ok){ var e=document.getElementById('loginErr'); if(e){ e.style.display='block'; e.style.color=ok?'#1a7f4b':'#C2422F'; e.innerHTML=t; } }
+  function enter(){ if(typeof showScreen==='function')showScreen('app'); if(typeof showView==='function')showView('dashboard'); }
+  function setMode(m){
+    mode=m;
+    var btn=document.querySelector('#demoBtns button');
+    var h=document.querySelector('#screen-login h1');
+    var sub=document.querySelector('#screen-login .sub');
+    var tog=document.getElementById('sbToggle');
+    if(m==='signup'){ if(btn)btn.textContent='Daftar Akun'; if(h)h.textContent='Daftar'; if(sub)sub.textContent='Buat akun baru untuk MICRONE.'; if(tog)tog.innerHTML='Sudah punya akun? <b>Masuk di sini</b>'; }
+    else { if(btn)btn.textContent='Masuk'; if(h)h.textContent='Masuk'; if(sub)sub.textContent='Masuk untuk membuka area member MICRONE.'; if(tog)tog.innerHTML='Belum punya akun? <b>Daftar di sini</b>'; }
+  }
+  window.sbToggleMode=function(){ var e=document.getElementById('loginErr'); if(e)e.style.display='none'; setMode(mode==='login'?'signup':'login'); };
+  window.tryLogin=function(){
+    if(!sbc){ msg('Koneksi login belum siap. Pastikan ada internet, lalu coba lagi.'); return; }
+    var em=((document.getElementById('loginEmail')||{}).value||'').trim();
+    var pw=((document.getElementById('loginPass')||{}).value||'');
+    if(!em||!pw){ msg('Isi email dan kata sandi dulu.'); return; }
+    if(pw.length<6){ msg('Kata sandi minimal 6 karakter.'); return; }
+    if(mode==='signup'){
+      msg('Mendaftar\u2026',true);
+      sbc.auth.signUp({email:em,password:pw}).then(function(r){
+        if(r.error){ msg(r.error.message); }
+        else { msg('Akun dibuat! Buka email <b>'+em+'</b>, klik link verifikasi, lalu Masuk.',true); setMode('login'); }
+      });
+    } else {
+      msg('Memproses\u2026',true);
+      sbc.auth.signInWithPassword({email:em,password:pw}).then(function(r){
+        if(r.error){ msg('Gagal masuk: email/sandi salah, atau email belum diverifikasi.'); }
+        else { var e=document.getElementById('loginErr'); if(e)e.style.display='none'; enter(); }
+      });
+    }
+  };
+  window.sbLogout=function(){ try{ if(sbc)sbc.auth.signOut(); }catch(e){} };
+  function wire(){
+    var card=document.querySelector('#screen-login .login-card');
+    if(card && !document.getElementById('sbToggle')){
+      var t=document.createElement('div');
+      t.id='sbToggle';
+      t.style.cssText='text-align:center;margin-top:18px;font-size:13px;color:var(--muted);cursor:pointer';
+      t.innerHTML='Belum punya akun? <b>Daftar di sini</b>';
+      t.onclick=window.sbToggleMode;
+      card.appendChild(t);
+    }
+    var btns=document.querySelectorAll('button');
+    for(var i=0;i<btns.length;i++){ if(/Keluar/.test(btns[i].textContent||'')){ btns[i].addEventListener('click',window.sbLogout); } }
+  }
+  function boot(){ init(); wire(); }
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',function(){ setTimeout(boot,200); }); }
+  else { setTimeout(boot,200); }
+})();
+</script>
 </body>
 </html>
