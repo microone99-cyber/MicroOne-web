@@ -1218,17 +1218,8 @@
         <span class="brand-text"><span class="brand-wm"></span><span class="brand-tag">Journey to Shared Wealth</span></span>
       </a>
       <h1>Masuk</h1>
-      <p class="sub">Masuk untuk membuka area member MICRONE.</p>
-      <div class="field"><label>Email</label><input type="email" id="loginEmail" placeholder="nama@email.com" value="microone25@gmail.com"></div>
-      <div class="field"><label>Kata Sandi</label><input type="password" id="loginPass" placeholder="Masukkan kata sandi" value=""></div>
-      <div class="login-row"><label style="display:flex;align-items:center;gap:8px;color:var(--text);cursor:pointer"><input type="checkbox" checked style="accent-color:#1F3D73"> Ingat saya</label><a id="lupaLink" style="cursor:pointer">Lupa sandi?</a></div>
-      <div class="login-track-btns" id="demoBtns">
-        <button class="btn btn-primary btn-wide" onclick="tryLogin()">Masuk</button><div id="loginErr" style="display:none;color:#C2422F;font-size:12.5px;text-align:center;margin-top:10px;font-weight:600">Email atau kata sandi salah. Coba lagi.</div>
-      </div>
-      <div id="realAuthBtns" style="display:none">
-        <button class="btn btn-primary btn-wide" onclick="apiLogin()">Masuk</button>
-        <div style="text-align:center;margin-top:12px;font-size:13.5px;color:var(--text)">Belum punya akun? <a onclick="apiRegister()" style="color:var(--primary-d);cursor:pointer;font-weight:700">Daftar</a></div>
-      </div>
+      <p class="sub">Masuk pakai akun Google untuk membuka area member MICRONE.</p>
+      <div class="login-track-btns" id="demoBtns"></div>
       <div class="login-demo-note">Area member <b>hanya terbuka setelah Anda memiliki paket aktif</b>. Tiap kelas terkunci: member Saham tidak melihat Forex, begitu pula sebaliknya. Untuk akses keduanya, beli 2 kelas (Saham + Forex).</div>
       <div class="login-back">Mau lihat-lihat dulu? <a onclick="goLanding()">Lihat paket membership</a></div>
     </div>
@@ -2755,8 +2746,9 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
   var SB_URL='https://bljwcdefucjketiyeisi.supabase.co';
   var SB_KEY='sb_publishable_qVNFQ5cNsCZQmfm7IufbJg_OapCyy4K';
   var SB_SITE='https://mikro-one-web.vercel.app';
-  var sbc=null, mode='login';
-  function init(){ try{ if(window.supabase&&window.supabase.createClient){ sbc=window.supabase.createClient(SB_URL,SB_KEY); window.sbc=sbc; } }catch(e){} }
+  var sbc=null, mode='login', AUTO_ENTERED=false;
+  var RECOVERY=false; try{ RECOVERY=(location.hash||'').indexOf('type=recovery')>=0; }catch(e){}
+  function init(){ try{ if(window.supabase&&window.supabase.createClient){ sbc=window.supabase.createClient(SB_URL,SB_KEY); window.sbc=sbc; try{ sbc.auth.onAuthStateChange(function(ev,session){ if(ev==='PASSWORD_RECOVERY'){ showResetForm(); return; } if((ev==='SIGNED_IN'||ev==='INITIAL_SESSION')&&session&&session.user&&!RECOVERY&&!AUTO_ENTERED){ AUTO_ENTERED=true; runGate(session.user.id); } }); }catch(_e){} } }catch(e){} }
   function msg(t,ok){ var e=document.getElementById('loginErr'); if(e){ e.style.display='block'; e.style.color=ok?'#1a7f4b':'#C2422F'; e.innerHTML=t; } }
   function enter(){ if(typeof showScreen==='function')showScreen('app'); if(typeof showView==='function')showView('dashboard'); }
   function setMode(m){
@@ -2779,7 +2771,7 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
       msg('Mendaftar\u2026',true);
       sbc.auth.signUp({email:em,password:pw}).then(function(r){
         if(r.error){ msg(r.error.message); }
-        else { msg('Akun dibuat! Buka email <b>'+em+'</b>, klik link verifikasi, lalu Masuk.',true); setMode('login'); }
+        else { if(r.data&&r.data.session){ msg('Akun dibuat dan aktif! Silakan Masuk pakai email dan sandi tadi.',true); } else { msg('Akun dibuat! Buka email <b>'+em+'</b>, klik link verifikasi, lalu Masuk.',true); } setMode('login'); }
       });
     } else {
       msg('Memproses\u2026',true);
@@ -2788,9 +2780,9 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
         else {
           var uid=(((r.data||{}).user)||{}).id;
           msg('Memeriksa paket membership…',true);
-          sbc.from('profiles').select('status,track,expires_at').eq('id',uid).single().then(function(p){
+          sbc.from('profiles').select('status,track').eq('id',uid).maybeSingle().then(function(p){
             var pr=p.data;
-            if((p.error)||(!pr)){ msg('Gagal memuat data akun. Coba lagi sebentar lagi.'); return; }
+            if((p.error)||(!pr)){ var e2=document.getElementById('loginErr'); if(e2)e2.style.display='none'; if(typeof enterDemo==='function'){ enterDemo('saham'); } else { enter(); } return; }
             var aktif=(pr.status==='aktif');
             var habis=pr.expires_at?(new Date(pr.expires_at).getTime()<Date.now()):false;
             if(aktif&&!habis){
@@ -2816,10 +2808,29 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
       else { msg('Link reset sudah dikirim ke <b>'+em+'</b>. Cek inbox (dan folder Spam), klik link-nya untuk membuat sandi baru.',true); }
     });
   };
+  function runGate(uid){
+    if(!uid){ return; }
+    msg('Memeriksa membership\u2026',true);
+    sbc.from('profiles').select('status,track').eq('id',uid).maybeSingle().then(function(p){
+      var pr=p.data;
+      if((p.error)||(!pr)){ var e2=document.getElementById('loginErr'); if(e2)e2.style.display='none'; if(typeof enterDemo==='function'){ enterDemo('saham'); } else { enter(); } return; }
+      if(pr.status==='aktif'){ var e=document.getElementById('loginErr'); if(e)e.style.display='none'; if(typeof enterDemo==='function'){ enterDemo(pr.track||'saham'); } else { enter(); } }
+      else { msg('Login berhasil, tapi kamu <b>belum punya paket membership aktif</b>. Pilih paket di bawah, atau hubungi admin: <a href="https://wa.me/6285956003839" style="color:var(--primary);font-weight:700">WhatsApp</a>.'); }
+    });
+  }
+  window.sbGoogleLogin=function(){
+    if(!sbc){ msg('Koneksi login belum siap. Pastikan ada internet, lalu coba lagi.'); return; }
+    msg('Mengarahkan ke Google\u2026',true);
+    var ro=SB_SITE; try{ ro=location.origin; }catch(e){}
+    sbc.auth.signInWithOAuth({provider:'google',options:{redirectTo:ro}}).then(function(r){
+      if(r&&r.error){ msg('Gagal membuka Login Google: '+((r.error&&r.error.message)||'')); }
+    });
+  };
   window.sbLogout=function(){ try{ if(sbc)sbc.auth.signOut(); }catch(e){} };
   function wire(){
+    if(!document.getElementById('verTag')){ var _v=document.createElement('div'); _v.id='verTag'; _v.textContent='v37'; _v.style.cssText='position:fixed;right:6px;bottom:4px;z-index:99999;font-size:10px;color:#bbb;opacity:.7;pointer-events:none'; document.body.appendChild(_v); }
     var card=document.querySelector('#screen-login .login-card');
-    if(card && !document.getElementById('sbToggle')){
+    if(false){
       var t=document.createElement('div');
       t.id='sbToggle';
       t.style.cssText='text-align:center;margin-top:14px;font-size:15px;color:var(--primary);font-weight:600;cursor:pointer';
@@ -2828,12 +2839,50 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
       var anc=document.getElementById('demoBtns');
       if(anc&&anc.parentNode){ anc.parentNode.insertBefore(t,anc.nextSibling); } else { card.appendChild(t); }
     }
+    var lcard=document.querySelector('#screen-login .login-card');
+    if(lcard && !document.getElementById('gBtn')){
+      var gw=document.createElement('div'); gw.id='gWrap';
+      gw.innerHTML='<button type="button" id="gBtn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;background:#fff;color:#3c4043;border:1px solid #dadce0;border-radius:10px;padding:13px;font-weight:600;font-size:15px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.08)"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Login dengan Google</button>';
+      var anc2=document.getElementById('demoBtns');
+      if(anc2&&anc2.parentNode){ anc2.parentNode.insertBefore(gw,anc2); } else { lcard.appendChild(gw); }
+      var gb=document.getElementById('gBtn'); if(gb)gb.onclick=window.sbGoogleLogin;
+    }
     var lk=document.getElementById('lupaLink');
     if(lk){ lk.addEventListener('click',function(ev){ if(ev&&ev.preventDefault)ev.preventDefault(); window.sbForgot(); }); }
     var btns=document.querySelectorAll('button');
     for(var i=0;i<btns.length;i++){ if(/Keluar/.test(btns[i].textContent||'')){ btns[i].addEventListener('click',window.sbLogout); } }
   }
-  function boot(){ init(); wire(); }
+  function setupRecovery(){
+    if(RECOVERY){ setTimeout(showResetForm,1100); }
+  }
+  function showResetForm(){
+    var o=document.getElementById('pwResetOv');
+    if(!o){
+      o=document.createElement('div'); o.id='pwResetOv';
+      o.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(15,22,40,.6);display:flex;align-items:center;justify-content:center;padding:20px';
+      o.innerHTML='<div style="background:#fff;max-width:400px;width:100%;border-radius:16px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.3)">'+
+        '<h2 style="margin:0 0 6px;font-size:20px;color:#1F3D73">Buat Sandi Baru</h2>'+
+        '<p style="margin:0 0 14px;font-size:13px;color:#666">Masukkan kata sandi baru untuk akunmu (minimal 6 huruf).</p>'+
+        '<input type="password" id="pwNew" placeholder="Kata sandi baru" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:15px;margin-bottom:10px">'+
+        '<button type="button" id="pwSave" style="width:100%;background:linear-gradient(135deg,#1F3D73,#2E5BAF);color:#fff;border:none;border-radius:10px;padding:13px;font-weight:700;font-size:15px;cursor:pointer">Simpan Sandi Baru</button>'+
+        '<div id="pwMsg" style="font-size:13px;margin-top:10px;display:none"></div></div>';
+      document.body.appendChild(o);
+      document.getElementById('pwSave').onclick=function(){
+        var np=((document.getElementById('pwNew')||{}).value)||'';
+        var m=document.getElementById('pwMsg');
+        function show(t,ok){ if(m){ m.style.display='block'; m.textContent=t; m.style.color=ok?'#1a7f4b':'#C2422F'; } }
+        if(np.length<6){ show('Kata sandi minimal 6 huruf.'); return; }
+        show('Menyimpan...',true);
+        sbc.auth.updateUser({password:np}).then(function(r){
+          if(r.error){ show('Gagal: '+(r.error.message||'')); return; }
+          show('Sandi berhasil diubah! Silakan login dengan sandi baru.',true);
+          setTimeout(function(){ o.style.display='none'; try{ sbc.auth.signOut(); }catch(e){} if(typeof showScreen==='function')showScreen('login'); },1800);
+        });
+      };
+    }
+    o.style.display='flex';
+  }
+  function boot(){ init(); wire(); setupRecovery(); window.sbChangePw=showResetForm; }
   if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',function(){ setTimeout(boot,200); }); }
   else { setTimeout(boot,200); }
 })();
@@ -2865,9 +2914,9 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
         o=document.createElement('div'); o.id='adminOv';
         o.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(15,22,40,.55);overflow:auto;padding:16px;display:flex;align-items:flex-start;justify-content:center';
         o.innerHTML='<div style="background:#fff;max-width:560px;width:100%;border-radius:16px;padding:20px;margin:24px 0;box-shadow:0 20px 60px rgba(0,0,0,.3)">'+
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:20px;color:#1F3D73">Panel Admin &mdash; Sinyal Saham</h2>'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:20px;color:#1F3D73">Panel Admin <span style="font-size:11px;color:#9C7220;font-weight:400">v36</span></h2>'+
           '<button type="button" id="admClose" style="background:#eee;border:none;border-radius:8px;width:32px;height:32px;font-size:16px;cursor:pointer">&times;</button></div>'+
-          '<div style="background:#f0f4fb;border-radius:10px;padding:10px;margin-bottom:14px"><div style="font-size:12px;color:#555;margin-bottom:6px;font-weight:600">Lihat member area sebagai:</div><div style="display:flex;gap:8px"><button type="button" id="vaSaham" style="flex:1;padding:9px;border:1px solid #1F3D73;background:#1F3D73;color:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Saham</button><button type="button" id="vaForex" style="flex:1;padding:9px;border:1px solid #1F3D73;background:#fff;color:#1F3D73;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Forex</button></div></div>'+'<div style="display:grid;gap:10px">'+
+          '<div style="background:#f0f4fb;border-radius:10px;padding:10px;margin-bottom:14px"><div style="font-size:12px;color:#555;margin-bottom:6px;font-weight:600">Lihat member area sebagai:</div><div style="display:flex;gap:8px"><button type="button" id="vaSaham" style="flex:1;padding:9px;border:1px solid #1F3D73;background:#1F3D73;color:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Saham</button><button type="button" id="vaForex" style="flex:1;padding:9px;border:1px solid #1F3D73;background:#fff;color:#1F3D73;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Forex</button></div></div>'+'<button type="button" id="admGantiPw" style="width:100%;padding:10px;border:1px solid #C2922F;background:#fff;color:#9C7220;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:14px">Ganti Sandi Saya (tanpa email)</button>'+'<div style="display:grid;gap:10px">'+
           '<label style="font-size:13px;font-weight:600;color:#333">Kelas<select id="admTrack" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"><option value="saham">Saham</option><option value="forex">Forex</option></select></label>'+'<label style="font-size:13px;font-weight:600;color:#333">Kategori<select id="admKat" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"><option value="swing">Sinyal Swing</option><option value="scalping">Sinyal Scalping</option><option value="fundamental">Riset Fundamental</option></select></label>'+
           '<label style="font-size:13px;font-weight:600;color:#333">Judul<input id="admJudul" placeholder="cth: Swing BBRI" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"></label>'+
           '<label style="font-size:13px;font-weight:600;color:#333">Emiten / Kode<input id="admEmiten" placeholder="cth: BBRI" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"></label>'+
@@ -2876,7 +2925,7 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
           '<div id="admMsg" style="font-size:13px;display:none;padding:8px;border-radius:8px"></div></div>'+
           '<h3 style="font-size:15px;color:#1F3D73;margin:18px 0 8px">Sinyal tayang</h3><div id="admList" style="display:grid;gap:8px;font-size:13px">Memuat...</div></div>';
         document.body.appendChild(o);
-        document.getElementById('admClose').onclick=function(){ o.style.display='none'; }; var _vs=document.getElementById('vaSaham'); if(_vs)_vs.onclick=function(){ viewAs('saham'); }; var _vf=document.getElementById('vaForex'); if(_vf)_vf.onclick=function(){ viewAs('forex'); };
+        document.getElementById('admClose').onclick=function(){ o.style.display='none'; }; var _vs=document.getElementById('vaSaham'); if(_vs)_vs.onclick=function(){ viewAs('saham'); }; var _vf=document.getElementById('vaForex'); if(_vf)_vf.onclick=function(){ viewAs('forex'); }; var _gp=document.getElementById('admGantiPw'); if(_gp)_gp.onclick=function(){ if(window.sbChangePw)window.sbChangePw(); };
         document.getElementById('admPost').onclick=postSignal; var _tr=document.getElementById('admTrack'); if(_tr)_tr.onchange=updateKat; updateKat();
         o.onclick=function(e){ if(e.target===o) o.style.display='none'; };
       }
