@@ -1221,7 +1221,7 @@
       <p class="sub">Masuk untuk membuka area member MICRONE.</p>
       <div class="field"><label>Email</label><input type="email" id="loginEmail" placeholder="nama@email.com" value="microone25@gmail.com"></div>
       <div class="field"><label>Kata Sandi</label><input type="password" id="loginPass" placeholder="Masukkan kata sandi" value=""></div>
-      <div class="login-row"><label style="display:flex;align-items:center;gap:8px;color:var(--text);cursor:pointer"><input type="checkbox" checked style="accent-color:#1F3D73"> Ingat saya</label><a>Lupa sandi?</a></div>
+      <div class="login-row"><label style="display:flex;align-items:center;gap:8px;color:var(--text);cursor:pointer"><input type="checkbox" checked style="accent-color:#1F3D73"> Ingat saya</label><a id="lupaLink" style="cursor:pointer">Lupa sandi?</a></div>
       <div class="login-track-btns" id="demoBtns">
         <button class="btn btn-primary btn-wide" onclick="tryLogin()">Masuk</button><div id="loginErr" style="display:none;color:#C2422F;font-size:12.5px;text-align:center;margin-top:10px;font-weight:600">Email atau kata sandi salah. Coba lagi.</div>
       </div>
@@ -1230,7 +1230,7 @@
         <div style="text-align:center;margin-top:12px;font-size:13.5px;color:var(--text)">Belum punya akun? <a onclick="apiRegister()" style="color:var(--primary-d);cursor:pointer;font-weight:700">Daftar</a></div>
       </div>
       <div class="login-demo-note">Area member <b>hanya terbuka setelah Anda memiliki paket aktif</b>. Tiap kelas terkunci: member Saham tidak melihat Forex, begitu pula sebaliknya. Untuk akses keduanya, beli 2 kelas (Saham + Forex).</div>
-      <div class="login-back">Belum punya akun? <a onclick="goLanding()">Lihat paket membership</a></div>
+      <div class="login-back">Mau lihat-lihat dulu? <a onclick="goLanding()">Lihat paket membership</a></div>
     </div>
   </div>
 </div>
@@ -2754,6 +2754,7 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
 (function(){
   var SB_URL='https://bljwcdefucjketiyeisi.supabase.co';
   var SB_KEY='sb_publishable_qVNFQ5cNsCZQmfm7IufbJg_OapCyy4K';
+  var SB_SITE='https://mikro-one-web.vercel.app';
   var sbc=null, mode='login';
   function init(){ try{ if(window.supabase&&window.supabase.createClient){ sbc=window.supabase.createClient(SB_URL,SB_KEY); } }catch(e){} }
   function msg(t,ok){ var e=document.getElementById('loginErr'); if(e){ e.style.display='block'; e.style.color=ok?'#1a7f4b':'#C2422F'; e.innerHTML=t; } }
@@ -2783,10 +2784,20 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
     } else {
       msg('Memproses\u2026',true);
       sbc.auth.signInWithPassword({email:em,password:pw}).then(function(r){
-        if(r.error){ msg('Gagal masuk: email/sandi salah, atau email belum diverifikasi.'); }
+        if(r.error){ var em3=((r.error&&r.error.message)||'').toLowerCase(); if(em3.indexOf('not confirmed')>=0||em3.indexOf('verif')>=0){ msg('Email belum diverifikasi. Buka email <b>'+em+'</b>, klik link verifikasi, lalu Masuk lagi.'); } else { msg('Gagal masuk. Email atau sandi salah. Belum punya akun? Tekan <b>Daftar di sini</b> di bawah tombol Masuk.'); } }
         else { var e=document.getElementById('loginErr'); if(e)e.style.display='none'; enter(); }
       });
     }
+  };
+  window.sbForgot=function(){
+    if(!sbc){ msg('Koneksi belum siap. Pastikan ada internet, lalu coba lagi.'); return; }
+    var em=((document.getElementById('loginEmail')||{}).value||'').trim();
+    if(!em){ msg('Isi dulu email kamu di kolom Email, lalu tekan \u201cLupa sandi?\u201d lagi.'); return; }
+    msg('Mengirim link reset ke email\u2026',true);
+    sbc.auth.resetPasswordForEmail(em,{redirectTo:SB_SITE}).then(function(r){
+      if(r.error){ msg('Gagal mengirim link reset. Pastikan email benar.'); }
+      else { msg('Link reset sudah dikirim ke <b>'+em+'</b>. Cek inbox (dan folder Spam), klik link-nya untuk membuat sandi baru.',true); }
+    });
   };
   window.sbLogout=function(){ try{ if(sbc)sbc.auth.signOut(); }catch(e){} };
   function wire(){
@@ -2794,11 +2805,14 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
     if(card && !document.getElementById('sbToggle')){
       var t=document.createElement('div');
       t.id='sbToggle';
-      t.style.cssText='text-align:center;margin-top:18px;font-size:13px;color:var(--muted);cursor:pointer';
+      t.style.cssText='text-align:center;margin-top:14px;font-size:15px;color:var(--primary);font-weight:600;cursor:pointer';
       t.innerHTML='Belum punya akun? <b>Daftar di sini</b>';
       t.onclick=window.sbToggleMode;
-      card.appendChild(t);
+      var anc=document.getElementById('demoBtns');
+      if(anc&&anc.parentNode){ anc.parentNode.insertBefore(t,anc.nextSibling); } else { card.appendChild(t); }
     }
+    var lk=document.getElementById('lupaLink');
+    if(lk){ lk.addEventListener('click',function(ev){ if(ev&&ev.preventDefault)ev.preventDefault(); window.sbForgot(); }); }
     var btns=document.querySelectorAll('button');
     for(var i=0;i<btns.length;i++){ if(/Keluar/.test(btns[i].textContent||'')){ btns[i].addEventListener('click',window.sbLogout); } }
   }
