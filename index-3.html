@@ -2756,7 +2756,8 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
   var SB_KEY='sb_publishable_qVNFQ5cNsCZQmfm7IufbJg_OapCyy4K';
   var SB_SITE='https://mikro-one-web.vercel.app';
   var sbc=null, mode='login';
-  function init(){ try{ if(window.supabase&&window.supabase.createClient){ sbc=window.supabase.createClient(SB_URL,SB_KEY); } }catch(e){} }
+  var RECOVERY=false; try{ RECOVERY=(location.hash||'').indexOf('type=recovery')>=0; }catch(e){}
+  function init(){ try{ if(window.supabase&&window.supabase.createClient){ sbc=window.supabase.createClient(SB_URL,SB_KEY); window.sbc=sbc; try{ sbc.auth.onAuthStateChange(function(ev){ if(ev==='PASSWORD_RECOVERY'){ showResetForm(); } }); }catch(_e){} } }catch(e){} }
   function msg(t,ok){ var e=document.getElementById('loginErr'); if(e){ e.style.display='block'; e.style.color=ok?'#1a7f4b':'#C2422F'; e.innerHTML=t; } }
   function enter(){ if(typeof showScreen==='function')showScreen('app'); if(typeof showView==='function')showView('dashboard'); }
   function setMode(m){
@@ -2779,7 +2780,7 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
       msg('Mendaftar\u2026',true);
       sbc.auth.signUp({email:em,password:pw}).then(function(r){
         if(r.error){ msg(r.error.message); }
-        else { msg('Akun dibuat! Buka email <b>'+em+'</b>, klik link verifikasi, lalu Masuk.',true); setMode('login'); }
+        else { if(r.data&&r.data.session){ msg('Akun dibuat dan aktif! Silakan Masuk pakai email dan sandi tadi.',true); } else { msg('Akun dibuat! Buka email <b>'+em+'</b>, klik link verifikasi, lalu Masuk.',true); } setMode('login'); }
       });
     } else {
       msg('Memproses\u2026',true);
@@ -2788,9 +2789,9 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
         else {
           var uid=(((r.data||{}).user)||{}).id;
           msg('Memeriksa paket membership…',true);
-          sbc.from('profiles').select('status,track,expires_at').eq('id',uid).single().then(function(p){
+          sbc.from('profiles').select('status,track').eq('id',uid).maybeSingle().then(function(p){
             var pr=p.data;
-            if((p.error)||(!pr)){ msg('Gagal memuat data akun. Coba lagi sebentar lagi.'); return; }
+            if((p.error)||(!pr)){ var e2=document.getElementById('loginErr'); if(e2)e2.style.display='none'; if(typeof enterDemo==='function'){ enterDemo('saham'); } else { enter(); } return; }
             var aktif=(pr.status==='aktif');
             var habis=pr.expires_at?(new Date(pr.expires_at).getTime()<Date.now()):false;
             if(aktif&&!habis){
@@ -2818,6 +2819,7 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
   };
   window.sbLogout=function(){ try{ if(sbc)sbc.auth.signOut(); }catch(e){} };
   function wire(){
+    if(!document.getElementById('verTag')){ var _v=document.createElement('div'); _v.id='verTag'; _v.textContent='v35'; _v.style.cssText='position:fixed;right:6px;bottom:4px;z-index:99999;font-size:10px;color:#bbb;opacity:.7;pointer-events:none'; document.body.appendChild(_v); }
     var card=document.querySelector('#screen-login .login-card');
     if(card && !document.getElementById('sbToggle')){
       var t=document.createElement('div');
@@ -2833,9 +2835,158 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
     var btns=document.querySelectorAll('button');
     for(var i=0;i<btns.length;i++){ if(/Keluar/.test(btns[i].textContent||'')){ btns[i].addEventListener('click',window.sbLogout); } }
   }
-  function boot(){ init(); wire(); }
+  function setupRecovery(){
+    if(RECOVERY){ setTimeout(showResetForm,1100); }
+  }
+  function showResetForm(){
+    var o=document.getElementById('pwResetOv');
+    if(!o){
+      o=document.createElement('div'); o.id='pwResetOv';
+      o.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(15,22,40,.6);display:flex;align-items:center;justify-content:center;padding:20px';
+      o.innerHTML='<div style="background:#fff;max-width:400px;width:100%;border-radius:16px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.3)">'+
+        '<h2 style="margin:0 0 6px;font-size:20px;color:#1F3D73">Buat Sandi Baru</h2>'+
+        '<p style="margin:0 0 14px;font-size:13px;color:#666">Masukkan kata sandi baru untuk akunmu (minimal 6 huruf).</p>'+
+        '<input type="password" id="pwNew" placeholder="Kata sandi baru" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:15px;margin-bottom:10px">'+
+        '<button type="button" id="pwSave" style="width:100%;background:linear-gradient(135deg,#1F3D73,#2E5BAF);color:#fff;border:none;border-radius:10px;padding:13px;font-weight:700;font-size:15px;cursor:pointer">Simpan Sandi Baru</button>'+
+        '<div id="pwMsg" style="font-size:13px;margin-top:10px;display:none"></div></div>';
+      document.body.appendChild(o);
+      document.getElementById('pwSave').onclick=function(){
+        var np=((document.getElementById('pwNew')||{}).value)||'';
+        var m=document.getElementById('pwMsg');
+        function show(t,ok){ if(m){ m.style.display='block'; m.textContent=t; m.style.color=ok?'#1a7f4b':'#C2422F'; } }
+        if(np.length<6){ show('Kata sandi minimal 6 huruf.'); return; }
+        show('Menyimpan...',true);
+        sbc.auth.updateUser({password:np}).then(function(r){
+          if(r.error){ show('Gagal: '+(r.error.message||'')); return; }
+          show('Sandi berhasil diubah! Silakan login dengan sandi baru.',true);
+          setTimeout(function(){ o.style.display='none'; try{ sbc.auth.signOut(); }catch(e){} if(typeof showScreen==='function')showScreen('login'); },1800);
+        });
+      };
+    }
+    o.style.display='flex';
+  }
+  function boot(){ init(); wire(); setupRecovery(); window.sbChangePw=showResetForm; }
   if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',function(){ setTimeout(boot,200); }); }
   else { setTimeout(boot,200); }
+})();
+</script>
+
+<script id="admin-js">
+(function(){
+  function ready(cb){ if(window.sbc){ cb(window.sbc); } else { setTimeout(function(){ ready(cb); }, 300); } }
+  ready(function(sbc){
+    function val(id){ var e=document.getElementById(id); return e?e.value:''; }
+    function setVal(id,v){ var e=document.getElementById(id); if(e)e.value=v; }
+    function esc(t){ t=(t==null?'':''+t); return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    function adminBtn(){
+      var b=document.getElementById('adminFab'); if(b) return b;
+      b=document.createElement('button'); b.id='adminFab'; b.type='button';
+      b.textContent='\uD83D\uDEE0 Panel Admin';
+      b.style.cssText='position:fixed;left:14px;bottom:16px;z-index:9998;background:linear-gradient(135deg,#1F3D73,#2E5BAF);color:#fff;border:none;border-radius:30px;padding:11px 16px;font-weight:700;font-size:13px;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;display:none';
+      b.onclick=openAdmin; document.body.appendChild(b); return b;
+    }
+    function showAdmin(){ adminBtn().style.display='block'; }
+    function hideAdmin(){ var b=document.getElementById('adminFab'); if(b)b.style.display='none'; var o=document.getElementById('adminOv'); if(o)o.style.display='none'; }
+
+    function amsg(t,ok){ var e=document.getElementById('admMsg'); if(!e)return; e.style.display='block'; e.textContent=t; e.style.background=ok?'#e6f5ec':'#fdecea'; e.style.color=ok?'#1a7f4b':'#c0392b'; }
+
+    function openAdmin(){
+      var o=document.getElementById('adminOv');
+      if(!o){
+        o=document.createElement('div'); o.id='adminOv';
+        o.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(15,22,40,.55);overflow:auto;padding:16px;display:flex;align-items:flex-start;justify-content:center';
+        o.innerHTML='<div style="background:#fff;max-width:560px;width:100%;border-radius:16px;padding:20px;margin:24px 0;box-shadow:0 20px 60px rgba(0,0,0,.3)">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:20px;color:#1F3D73">Panel Admin <span style="font-size:11px;color:#9C7220;font-weight:400">v35</span></h2>'+
+          '<button type="button" id="admClose" style="background:#eee;border:none;border-radius:8px;width:32px;height:32px;font-size:16px;cursor:pointer">&times;</button></div>'+
+          '<div style="background:#f0f4fb;border-radius:10px;padding:10px;margin-bottom:14px"><div style="font-size:12px;color:#555;margin-bottom:6px;font-weight:600">Lihat member area sebagai:</div><div style="display:flex;gap:8px"><button type="button" id="vaSaham" style="flex:1;padding:9px;border:1px solid #1F3D73;background:#1F3D73;color:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Saham</button><button type="button" id="vaForex" style="flex:1;padding:9px;border:1px solid #1F3D73;background:#fff;color:#1F3D73;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Forex</button></div></div>'+'<button type="button" id="admGantiPw" style="width:100%;padding:10px;border:1px solid #C2922F;background:#fff;color:#9C7220;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:14px">Ganti Sandi Saya (tanpa email)</button>'+'<div style="display:grid;gap:10px">'+
+          '<label style="font-size:13px;font-weight:600;color:#333">Kelas<select id="admTrack" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"><option value="saham">Saham</option><option value="forex">Forex</option></select></label>'+'<label style="font-size:13px;font-weight:600;color:#333">Kategori<select id="admKat" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"><option value="swing">Sinyal Swing</option><option value="scalping">Sinyal Scalping</option><option value="fundamental">Riset Fundamental</option></select></label>'+
+          '<label style="font-size:13px;font-weight:600;color:#333">Judul<input id="admJudul" placeholder="cth: Swing BBRI" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"></label>'+
+          '<label style="font-size:13px;font-weight:600;color:#333">Emiten / Kode<input id="admEmiten" placeholder="cth: BBRI" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"></label>'+
+          '<label style="font-size:13px;font-weight:600;color:#333">Isi sinyal / analisa<textarea id="admIsi" rows="5" placeholder="Area beli, target TP1/TP2, stop loss, catatan..." style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical"></textarea></label>'+
+          '<button type="button" id="admPost" style="background:linear-gradient(135deg,#1F3D73,#2E5BAF);color:#fff;border:none;border-radius:10px;padding:13px;font-weight:700;font-size:15px;cursor:pointer">Posting Sinyal</button>'+
+          '<div id="admMsg" style="font-size:13px;display:none;padding:8px;border-radius:8px"></div></div>'+
+          '<h3 style="font-size:15px;color:#1F3D73;margin:18px 0 8px">Sinyal tayang</h3><div id="admList" style="display:grid;gap:8px;font-size:13px">Memuat...</div></div>';
+        document.body.appendChild(o);
+        document.getElementById('admClose').onclick=function(){ o.style.display='none'; }; var _vs=document.getElementById('vaSaham'); if(_vs)_vs.onclick=function(){ viewAs('saham'); }; var _vf=document.getElementById('vaForex'); if(_vf)_vf.onclick=function(){ viewAs('forex'); }; var _gp=document.getElementById('admGantiPw'); if(_gp)_gp.onclick=function(){ if(window.sbChangePw)window.sbChangePw(); };
+        document.getElementById('admPost').onclick=postSignal; var _tr=document.getElementById('admTrack'); if(_tr)_tr.onchange=updateKat; updateKat();
+        o.onclick=function(e){ if(e.target===o) o.style.display='none'; };
+      }
+      o.style.display='flex'; listSignals();
+    }
+
+    function updateKat(){
+      var tr=val('admTrack'); var k=document.getElementById('admKat'); if(!k)return;
+      k.innerHTML=(tr==='forex')?'<option value="fast">Fast Trade</option><option value="fundamental">Analisa Fundamental</option>':'<option value="swing">Sinyal Swing</option><option value="scalping">Sinyal Scalping</option><option value="fundamental">Riset Fundamental</option>';
+    }
+    function postSignal(){
+      var kat=val('admKat'), judul=val('admJudul').trim(), emiten=val('admEmiten').trim(), isi=val('admIsi').trim();
+      if(!judul||!isi){ amsg('Judul dan isi wajib diisi.'); return; }
+      amsg('Menyimpan...',true);
+      sbc.from('signals').insert({track:val('admTrack'),kategori:kat,judul:judul,emiten:emiten,isi:isi,status:'tayang'}).then(function(r){
+        if(r.error){ amsg('Gagal simpan: '+(r.error.message||'')); return; }
+        amsg('Sinyal tayang! Member Saham langsung melihatnya.',true);
+        setVal('admJudul',''); setVal('admEmiten',''); setVal('admIsi','');
+        listSignals(); loadMemberSignals('saham');
+      });
+    }
+
+    function listSignals(){
+      var host=document.getElementById('admList'); if(!host)return; host.textContent='Memuat...';
+      sbc.from('signals').select('id,track,kategori,judul,emiten,created_at').order('created_at',{ascending:false}).then(function(r){
+        var rows=r.data||[];
+        if(!rows.length){ host.innerHTML='<div style="color:#888">Belum ada sinyal.</div>'; return; }
+        var h='';
+        for(var i=0;i<rows.length;i++){ var x=rows[i];
+          h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid #eee;border-radius:8px;padding:8px 10px"><span><b>'+esc(x.judul)+'</b> <span style="color:#888">&middot; '+esc(x.track)+' / '+esc(x.kategori)+(x.emiten?(' &middot; '+esc(x.emiten)):'')+'</span></span><button type="button" data-id="'+x.id+'" style="background:#fdecea;color:#c0392b;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer">Hapus</button></div>';
+        }
+        host.innerHTML=h;
+        var btns=host.querySelectorAll('button[data-id]');
+        for(var j=0;j<btns.length;j++){ btns[j].onclick=function(){ delSignal(this.getAttribute('data-id')); }; }
+      });
+    }
+    function delSignal(id){ if(!id)return; sbc.from('signals').delete().eq('id',id).then(function(){ listSignals(); loadMemberSignals('saham'); }); }
+
+    function memberBox(){
+      var box=document.getElementById('dbSignals'); if(box) return box;
+      var sc=document.getElementById('sigContent'); if(!sc||!sc.parentNode) return null;
+      box=document.createElement('div'); box.id='dbSignals'; box.style.cssText='margin-bottom:18px';
+      sc.parentNode.insertBefore(box, sc.parentNode.firstChild); return box;
+    }
+    function loadMemberSignals(track){
+      var box=memberBox(); if(!box)return;
+      sbc.from('signals').select('kategori,judul,emiten,isi,created_at').eq('track',track||'saham').eq('status','tayang').order('created_at',{ascending:false}).then(function(r){
+        var rows=r.data||[];
+        if(!rows.length){ box.innerHTML=''; return; }
+        var label={swing:'Sinyal Swing',scalping:'Sinyal Scalping',fundamental:'Riset Fundamental',fast:'Fast Trade'};
+        var h='<div style="font-weight:800;font-size:15px;color:#1F3D73;margin-bottom:10px">Sinyal Terbaru</div>';
+        for(var i=0;i<rows.length;i++){ var x=rows[i]; var d=new Date(x.created_at);
+          h+='<div style="border:1px solid #e6e9f0;border-radius:12px;padding:14px;margin-bottom:10px;background:#fff"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:#fff;background:linear-gradient(135deg,#1F3D73,#2E5BAF);padding:3px 9px;border-radius:20px">'+esc(label[x.kategori]||x.kategori)+'</span><span style="font-size:11px;color:#999">'+d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear()+'</span></div><div style="font-weight:700;font-size:15px;color:#1a2238">'+esc(x.judul)+(x.emiten?(' <span style="color:#888;font-weight:500">'+esc(x.emiten)+'</span>'):'')+'</div><div style="font-size:14px;color:#333;white-space:pre-wrap;margin-top:5px">'+esc(x.isi)+'</div></div>';
+        }
+        box.innerHTML=h;
+      });
+    }
+
+    function viewAs(track){
+      if(typeof setMemberTrack==='function'){ try{ setMemberTrack(track); }catch(e){} }
+      if(typeof showScreen==='function'){ try{ showScreen('app'); }catch(e){} }
+      if(typeof showView==='function'){ try{ showView('dashboard'); }catch(e){} }
+      loadMemberSignals(track);
+      var o=document.getElementById('adminOv'); if(o)o.style.display='none';
+    }
+    function refresh(){
+      sbc.auth.getUser().then(function(u){
+        var uid=(((u.data||{}).user)||{}).id; if(!uid){ hideAdmin(); return; }
+        sbc.from('profiles').select('is_admin,status,track').eq('id',uid).single().then(function(p){
+          var pr=(p.data)||{};
+          if(pr.is_admin){ showAdmin(); } else { hideAdmin(); }
+          if(pr.status==='aktif'){ loadMemberSignals(pr.track||'saham'); }
+        });
+      });
+    }
+    try{ sbc.auth.onAuthStateChange(function(){ setTimeout(refresh,400); }); }catch(e){}
+    setTimeout(refresh,1000);
+  });
 })();
 </script>
 </body>
