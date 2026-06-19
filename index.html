@@ -1324,7 +1324,7 @@ function showScreen(name){
 }
 function goLanding(){showScreen('landing');}
 var pendingView=null;
-function goLogin(view){pendingView=view||null;showScreen('login');}
+function goLogin(view){pendingView=view||null;if(!view&&typeof window.sbGoogleLogin==='function'){try{window.sbGoogleLogin();return;}catch(e){}}showScreen('login');}
 var API_BASE = '';
 var MIDTRANS_CLIENT_KEY = '';
 var MIDTRANS_PRODUCTION = false;
@@ -1494,6 +1494,7 @@ function enterDemo(track){
 
 /* ---- Ganti konten member sesuai kelas ---- */
 function setMemberTrack(track){
+  if(track!=='saham'&&track!=='forex')track='saham';
   memberTrack=track;
   var _sl=(track==='forex')?'Sinyal Fast Trade':'Sinyal Swing & Scalping';
   var _ids=['navSigLabel','gridSigLabel','sigTitle','sigCrumb'];for(var _i=0;_i<_ids.length;_i++){var _el=document.getElementById(_ids[_i]);if(_el)_el.textContent=_sl;}
@@ -2913,7 +2914,7 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
         o=document.createElement('div'); o.id='adminOv';
         o.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(15,22,40,.55);overflow:auto;padding:16px;display:flex;align-items:flex-start;justify-content:center';
         o.innerHTML='<div style="background:#fff;max-width:560px;width:100%;border-radius:16px;padding:20px;margin:24px 0;box-shadow:0 20px 60px rgba(0,0,0,.3)">'+
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:20px;color:#1F3D73">Panel Admin <span style="font-size:11px;color:#9C7220;font-weight:400">v39</span></h2>'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:20px;color:#1F3D73">Panel Admin <span style="font-size:11px;color:#9C7220;font-weight:400">v40</span></h2>'+
           '<button type="button" id="admClose" style="background:#eee;border:none;border-radius:8px;width:32px;height:32px;font-size:16px;cursor:pointer">&times;</button></div>'+
           '<div style="background:#f0f4fb;border-radius:10px;padding:10px;margin-bottom:14px"><div style="font-size:12px;color:#555;margin-bottom:6px;font-weight:600">Lihat member area sebagai:</div><div style="display:flex;gap:8px"><button type="button" id="vaSaham" style="flex:1;padding:9px;border:1px solid #1F3D73;background:#1F3D73;color:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Saham</button><button type="button" id="vaForex" style="flex:1;padding:9px;border:1px solid #1F3D73;background:#fff;color:#1F3D73;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Forex</button></div></div>'+'<button type="button" id="admGantiPw" style="width:100%;padding:10px;border:1px solid #C2922F;background:#fff;color:#9C7220;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:14px">Ganti Sandi Saya (tanpa email)</button>'+'<div style="display:grid;gap:10px">'+
           '<label style="font-size:13px;font-weight:600;color:#333">Kelas<select id="admTrack" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"><option value="saham">Saham</option><option value="forex">Forex</option></select></label>'+'<label style="font-size:13px;font-weight:600;color:#333">Kategori<select id="admKat" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"><option value="swing">Sinyal Swing</option><option value="scalping">Sinyal Scalping</option><option value="fundamental">Riset Fundamental</option></select></label>'+
@@ -3066,254 +3067,301 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
 })();
 </script>
 <script id="mo-cms">
-/* ===================== MICRONE CMS ENGINE (mo-cms) =====================
-   Menyambungkan Panel Admin -> tampilan cantik (Swing/Scalping/Data Overview/Riset).
-   Aman & additif: render hardcode tetap jalan sebagai cadangan. Worst case = sama
-   seperti sekarang. Semua tulis/baca pakai tabel signals + JSON di kolom isi.
+/* ===================== MICRONE CMS ENGINE v2 (mo-cms) =====================
+   Model ChatGPT: admin isi DATA -> sistem rangkai kartu premium (kotak merah)
+   otomatis. Tiap jenis konten punya TABEL TERSTRUKTUR sendiri di Supabase:
+     signals_swing | signals_forex | signals_scalping | data_overview | riset
+   Aman & additif: render hardcode tetap jadi cadangan kalau Supabase kosong/gagal.
+   Worst case = sama seperti sekarang.
    ===================================================================== */
 (function(){
   function sb(){ return window.sbc; }
   window.MO_ADMIN=false;
-  var SIG_MONTHS=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  var MONTHS=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
 
   function track(){ return window.memberTrack||'saham'; }
+  function mode(){ return window.sigMode||'swing'; }
   function esc(t){ t=(t==null?'':''+t); return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function jparse(s){ try{ var o=JSON.parse(s); return (o&&typeof o==='object')?o:null; }catch(e){ return null; } }
-  function fmtDate(iso){ try{ var d=new Date(iso); return d.getDate()+' '+SIG_MONTHS[d.getMonth()]+' '+d.getFullYear(); }catch(e){ return ''; } }
+  function num(v){ var n=parseFloat((''+v).replace(/\./g,'').replace(',','.')); return isNaN(n)?null:n; }
   function genSpark(st){
-    var base=100,arr=[base],i,step;
-    if(st==='hit'){ for(i=1;i<10;i++){ arr.push(+(arr[i-1]+2+Math.random()*2).toFixed(1)); } }
-    else if(st==='watch'){ for(i=1;i<10;i++){ step=(Math.random()-0.5)*3; arr.push(+(arr[i-1]+step).toFixed(1)); } }
-    else { for(i=1;i<10;i++){ step=0.5+Math.random()*1.8; arr.push(+(arr[i-1]+step).toFixed(1)); } }
+    var arr=[100],i,step;
+    if(st==='hit'||st==='tp3'){ for(i=1;i<10;i++) arr.push(+(arr[i-1]+2+Math.random()*2).toFixed(1)); }
+    else if(st==='watch'||st==='sl'){ for(i=1;i<10;i++){ step=(Math.random()-0.55)*3; arr.push(+(arr[i-1]+step).toFixed(1)); } }
+    else { for(i=1;i<10;i++){ step=0.4+Math.random()*1.8; arr.push(+(arr[i-1]+step).toFixed(1)); } }
     return arr;
   }
-  function moFetch(kategori){
+  function spark(st){ var a=genSpark(st); var up=a[a.length-1]>=a[0]; return (typeof window.sparkSvg==='function')?window.sparkSvg(a,up):''; }
+
+  function q(table){
     var c=sb(); if(!c) return Promise.resolve([]);
     try{
-      return c.from('signals').select('id,track,kategori,judul,emiten,isi,status,created_at')
-        .eq('track',track()).eq('kategori',kategori).order('created_at',{ascending:false})
+      return c.from(table).select('*').order('created_at',{ascending:false})
         .then(function(r){ return (r&&r.data)?r.data:[]; })['catch'](function(){ return []; });
     }catch(e){ return Promise.resolve([]); }
   }
-  function delRow(id,after){
+  function delRow(table,id,after){
     var c=sb(); if(!c||!id) return;
-    try{ c.from('signals')['delete']().eq('id',id).then(function(){ if(after)after(); })['catch'](function(){}); }catch(e){}
+    try{ c.from(table)['delete']().eq('id',id).then(function(){ if(after)after(); })['catch'](function(){}); }catch(e){}
   }
-  function admDelBtn(id){
+  function delBtn(table,id){
     if(!window.MO_ADMIN) return '';
-    return '<button type="button" class="mo-del" data-mo-del="'+esc(id)+'" style="margin-top:10px;background:#fdecea;color:#c0392b;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer">Hapus</button>';
+    return '<button type="button" data-mo-tbl="'+esc(table)+'" data-mo-del="'+esc(id)+'" style="margin-top:10px;background:#fdecea;color:#c0392b;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer">Hapus</button>';
   }
   function wireDel(box,reload){
     if(!box) return;
     var b=box.querySelectorAll('[data-mo-del]');
-    for(var i=0;i<b.length;i++){ b[i].onclick=function(){ var id=this.getAttribute('data-mo-del'); if(!confirm('Hapus item ini?'))return; delRow(id,reload); }; }
+    for(var i=0;i<b.length;i++){ b[i].onclick=function(){ if(!confirm('Hapus item ini?'))return; delRow(this.getAttribute('data-mo-tbl'),this.getAttribute('data-mo-del'),reload); }; }
   }
 
-  /* ---------- store originals ---------- */
-  var _sig,_scalp,_rekap,_riset;
-
-  /* ---------- SWING (gambar 2) ---------- */
+  /* ---------- SWING SAHAM ---------- */
   function swingCard(r){
-    var st=r.st==='hit'?'<span class="sig-st hit">HIT TARGET</span>':(r.st==='watch'?'<span class="sig-st watch">PANTAU</span>':'<span class="sig-st open">AKTIF</span>');
-    var spark=(r.spark&&r.spark.length)?r.spark:genSpark(r.st);
-    var up=spark[spark.length-1]>=spark[0];
-    var svg=(typeof window.sparkSvg==='function')?window.sparkSvg(spark,up):'';
-    return '<div class="sig-card"><div class="sig-top"><span class="sig-tk">'+esc(r.tk)+'</span>'+st+'<span class="sig-dt">'+esc(r.dt)+'</span></div>'+
-      '<div class="spark">'+svg+'</div>'+
-      '<div class="sig-plan"><div class="sig-pl"><div class="k">Area Beli</div><div class="v">'+esc(r.buy)+'</div></div>'+
-      '<div class="sig-pl tp"><div class="k">Target</div><div class="v">'+esc(r.tp)+'</div></div>'+
-      '<div class="sig-pl sl"><div class="k">Stop Loss</div><div class="v">'+esc(r.sl)+'</div></div></div>'+
-      '<div class="sig-al">'+esc(r.al)+'</div>'+admDelBtn(r.id)+'</div>';
+    var st=r.status==='hit'?'<span class="sig-st hit">HIT TARGET</span>':(r.status==='watch'?'<span class="sig-st watch">PANTAU</span>':'<span class="sig-st open">AKTIF</span>');
+    return '<div class="sig-card"><div class="sig-top"><span class="sig-tk">'+esc(r.emiten)+'</span>'+st+'<span class="sig-dt">'+esc(r.tanggal||'')+'</span></div>'+
+      '<div class="spark">'+spark(r.status)+'</div>'+
+      '<div class="sig-plan"><div class="sig-pl"><div class="k">Area Beli</div><div class="v">'+esc(r.area_beli||'-')+'</div></div>'+
+      '<div class="sig-pl tp"><div class="k">Target</div><div class="v">'+esc(r.target||'-')+'</div></div>'+
+      '<div class="sig-pl sl"><div class="k">Stop Loss</div><div class="v">'+esc(r.stop_loss||'-')+'</div></div></div>'+
+      '<div class="sig-al">'+esc(r.alasan||'')+'</div>'+delBtn('signals_swing',r.id)+'</div>';
   }
   function renderSwingDB(){
-    if(track()==='forex') return;
-    if((window.sigMode||'swing')==='scalping') return;
-    moFetch('swing').then(function(rows){
-      var box=document.getElementById('sigContent'); if(!box) return;
-      if(!rows.length) return; /* tidak ada data admin -> biarkan contoh hardcode */
+    if(track()!=='saham' || mode()==='scalping') return;
+    q('signals_swing').then(function(rows){
+      var box=document.getElementById('sigContent'); if(!box||!rows.length) return;
       var month=window.sigMonth||'Jan';
-      var md=[];
-      for(var i=0;i<rows.length;i++){ var x=rows[i]; var d=jparse(x.isi)||{};
-        if((d.bulan||'')!==month) continue;
-        md.push({tk:(x.emiten||x.judul||'-'),dt:(d.dt||fmtDate(x.created_at)),buy:(d.buy||'-'),tp:(d.tp||'-'),sl:(d.sl||'-'),al:(d.al||x.judul||''),st:(d.st||'open'),spark:d.spark,id:x.id});
-      }
-      var inst=track()==='forex'?'pair':'emiten';
+      var md=rows.filter(function(r){ return (r.bulan||'')===month; });
       if(!md.length){
         box.innerHTML='<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><h4>Belum ada sinyal</h4><p>Belum ada sinyal swing untuk bulan '+esc(month)+'.</p></div>';
         return;
       }
-      var h='<div class="sig-count">Bulan '+esc(month)+': <b>'+md.length+' '+inst+'</b> sinyal swing</div>';
-      for(var j=0;j<md.length;j++) h+=swingCard(md[j]);
-      h+='<div class="sig-note">Sinyal swing untuk hold mingguan. Saat target tercapai, status berubah menjadi <b>HIT TARGET</b>. Grafik gambaran arah pergerakan. Semua hanya contoh, bukan rekomendasi.</div>';
+      var h='<div class="sig-count">Bulan '+esc(month)+': <b>'+md.length+' emiten</b> sinyal swing</div>';
+      for(var i=0;i<md.length;i++) h+=swingCard(md[i]);
+      h+='<div class="sig-note">Sinyal swing untuk hold mingguan. Saat target tercapai, status berubah menjadi <b>HIT TARGET</b>. Semua hanya contoh, bukan rekomendasi.</div>';
       box.innerHTML=h; wireDel(box,renderSwingDB);
     });
   }
 
-  /* ---------- SCALPING (gambar 3) ---------- */
-  function renderScalpDB(){
-    moFetch('scalping').then(function(rows){
-      var box=document.getElementById('sigContent'); if(!box) return;
-      if((window.sigMode||'swing')!=='scalping') return;
-      if(!rows.length) return;
-      var newest=rows[0]; var d=jparse(newest.isi)||{};
-      var list=d.list;
-      if(!list||!list.length){
-        /* kalau admin isi per-baris emiten, kumpulkan semua judul/emiten */
-        list=[]; for(var i=0;i<rows.length;i++){ var e=rows[i].emiten||rows[i].judul; if(e)list.push(e); }
+  /* ---------- FAST TRADE FOREX ---------- */
+  function hitArr(st){ return st==='hit'||st==='tp3'?[1,1,1]:(st==='tp2'?[1,1,0]:(st==='tp1'?[1,0,0]:[0,0,0])); }
+  function fastCard(r){
+    var hit=hitArr(r.status); var nh=hit[0]+hit[1]+hit[2];
+    var st=nh===3?'<span class="sig-st hit">SEMUA TP TERCAPAI</span>':(r.status==='sl'?'<span class="sig-st watch">STOP LOSS</span>':(nh>0?'<span class="sig-st open">TP '+nh+' TERCAPAI</span>':'<span class="sig-st open">AKTIF</span>'));
+    var tps=[r.tp1,r.tp2,r.tp3]; var rows='';
+    for(var t=0;t<3;t++){ var hh=hit[t]===1; rows+='<div class="ft-tp'+(hh?' hit':'')+'"><span class="t">TP '+(t+1)+'</span><span class="p">'+esc(tps[t]||'-')+'</span>'+(hh?'<span class="ck">&#10003;</span>':'')+'</div>'; }
+    return '<div class="sig-card"><div class="sig-top"><span class="sig-tk">'+esc(r.pair)+'</span>'+st+'<span class="sig-dt">'+esc(r.tanggal||'')+'</span></div>'+
+      '<div class="spark">'+spark(nh>0?'hit':r.status)+'</div>'+
+      '<div class="ft-2"><div class="sig-pl"><div class="k">Entry</div><div class="v">'+esc(r.entry||'-')+'</div></div><div class="sig-pl sl"><div class="k">Stop Loss</div><div class="v">'+esc(r.stop_loss||'-')+'</div></div></div>'+
+      '<div class="ft-plan">'+rows+'</div><div class="sig-al">'+esc(r.alasan||'')+'</div>'+delBtn('signals_forex',r.id)+'</div>';
+  }
+  function renderFastDB(){
+    if(track()!=='forex' || mode()==='scalping') return;
+    q('signals_forex').then(function(rows){
+      var box=document.getElementById('sigContent'); if(!box||!rows.length) return;
+      var month=window.sigMonth||'Jan';
+      var md=rows.filter(function(r){ return (r.bulan||'')===month; });
+      if(!md.length){
+        box.innerHTML='<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><h4>Belum ada sinyal</h4><p>Belum ada sinyal fast trade untuk bulan '+esc(month)+'.</p></div>';
+        return;
       }
+      var h='<div class="sig-count">Bulan '+esc(month)+': <b>'+md.length+' pair</b> sinyal fast trade</div>';
+      for(var i=0;i<md.length;i++) h+=fastCard(md[i]);
+      h+='<div class="sig-note">Sinyal fast trade (intraday) khusus Forex. Tiap TP yang tercapai ditandai centang. Semua hanya contoh, bukan rekomendasi.</div>';
+      box.innerHTML=h; wireDel(box,renderFastDB);
+    });
+  }
+
+  /* ---------- SCALPING ---------- */
+  function renderScalpDB(){
+    if(mode()!=='scalping') return;
+    q('signals_scalping').then(function(rows){
+      var box=document.getElementById('sigContent'); if(!box) return;
+      rows=rows.filter(function(r){ return (r.track||'saham')===track(); });
+      if(!rows.length) return;
+      var r=rows[0];
+      var list=(r.emiten_list||'').split(',').map(function(s){return s.trim();}).filter(function(s){return s;});
       var u=track()==='forex'?'pair':'emiten';
-      var dateTxt=d.date||fmtDate(newest.created_at);
-      var chips='';
-      for(var k=0;k<list.length;k++) chips+='<span class="scalp-em">'+(k+1)+'. '+esc(list[k])+'</span>';
+      var chips=''; for(var k=0;k<list.length;k++) chips+='<span class="scalp-em">'+(k+1)+'. '+esc(list[k])+'</span>';
       var rules=track()==='forex'
         ? '<div class="scalp-rule"><h5>Aturan masuk</h5><p>Tunggu konfirmasi di area yang disebut. Kalau harga bergerak terlalu cepat dari area, lebih baik tunggu dulu sampai ada peluang masuk yang sehat.</p><p>Kalau belum menyentuh area, boleh antri di harga yang kamu mau sesuai rencana.</p></div>'
         : '<div class="scalp-rule"><h5>Aturan masuk</h5><p>Untuk entry buy: kalau IEP langsung naik di atas +3% atau lebih, tunggu dulu (wait &amp; see). Kalau IEP turun -1,5% atau lebih tanpa pergerakan dan ada yang HAKA, boleh masuk di harga penurunan tersebut.</p><p>Kalau belum menyentuh area persen yang disebut, boleh entry bebas, mau HAKA atau antri bid di harga berapa pun.</p></div>';
-      var html='<div class="scalp-panel"><div class="scalp-hd"><div class="t">Pantauan Scalping</div><div class="d">'+esc(dateTxt)+'</div></div>'+
+      var html='<div class="scalp-panel"><div class="scalp-hd"><div class="t">Pantauan Scalping</div><div class="d">'+esc(r.tanggal||'')+'</div></div>'+
         '<div class="scalp-bd"><div class="scalp-list">'+chips+'</div>'+
         '<div class="scalp-pick">Pilih salah satu saja, jangan semua. Maksimal 2 '+u+'.</div>'+rules+
         '<div class="scalp-alloc"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> Maksimal alokasi 5% dari total RDN. Jaga manajemen modal dan sesuaikan dengan strategi.</div></div></div>'+
-        (window.MO_ADMIN?admDelBtn(newest.id):'')+
+        delBtn('signals_scalping',r.id)+
         '<div class="sig-note">Daftar scalping diperbarui tiap hari trading. Cara membaca panggilan ini mengikuti panduan di Edukasi Strategi. Semua hanya contoh, bukan rekomendasi.</div>';
       box.innerHTML=html; wireDel(box,renderScalpDB);
     });
   }
 
-  /* ---------- DATA OVERVIEW (gambar 4) ---------- */
+  /* ---------- DATA OVERVIEW Excel ---------- */
+  function pctOf(last,base){
+    var l=parseFloat(last),b=parseFloat(base);
+    if(isNaN(l)||isNaN(b)||b===0) return '0%';
+    var p=((l-b)/b)*100; return (p>=0?'':'-')+Math.abs(p).toFixed(2).replace('.',',')+'%';
+  }
   function renderRekapDB(){
-    moFetch('overview').then(function(rows){
+    q('data_overview').then(function(rows){
       var box=document.getElementById('rekapContent'); if(!box) return;
+      rows=rows.filter(function(r){ return (r.track||'saham')===track(); });
       if(!rows.length) return;
-      var q=window.rekapQ||'q4'; var yr=String(window.rekapYear||2025);
-      var data=[];
-      for(var i=0;i<rows.length;i++){ var x=rows[i]; var d=jparse(x.isi)||{};
-        if(d.periode && d.periode!==q) continue;
-        if(d.tahun && String(d.tahun)!==yr) continue;
-        data.push([ (x.emiten||x.judul||'-'), d.date||'', d.buy||'', d.last||'', d.tp1||'', d.tp2||'', d.tp3||'', d.base||'', d.pct||'0%', (d.st||'HOLD'), x.id ]);
-      }
+      var per=window.rekapQ||'q4'; var yr=String(window.rekapYear||2025);
+      var data=rows.filter(function(r){ return (r.periode||'q4')===per && String(r.tahun||2025)===yr; });
       if(!data.length) return;
-      var REKAP_Q=[['q1','Jan\u2013Mar'],['q2','Apr\u2013Jun'],['q3','Jul\u2013Sep'],['q4','Okt\u2013Des']];
-      var label=''; for(var z=0;z<REKAP_Q.length;z++) if(REKAP_Q[z][0]===q) label=REKAP_Q[z][1]+' '+yr;
+      var Q=[['q1','Jan\u2013Mar'],['q2','Apr\u2013Jun'],['q3','Jul\u2013Sep'],['q4','Okt\u2013Des']];
+      var label=''; for(var z=0;z<Q.length;z++) if(Q[z][0]===per) label=Q[z][1]+' '+yr;
       var col=track()==='forex'?'Pair':'Kode'; var unit=track()==='forex'?'pair':'emiten';
       var G=[{k:'AREA BUY',c:'buy',d:'Masih di area cicil/beli. Selama harga di area & trend valid, boleh buyback bertahap sesuai Edukasi Strategi. Naik ke PROFIT RUN saat TP1 kena.'},
              {k:'PROFIT RUN',c:'run',d:'Sudah lari & menyentuh target bertahap. Amankan sebagian, sisanya trailing mengikuti TP berikutnya.'},
              {k:'HOLD',c:'hold',d:'Ditahan, belum kena TP/SL, masih sesuai rencana & trend. Sabar selama alasan awal masih berlaku.'},
              {k:'SL HIT',c:'sl',d:'Kena stop loss. Otomatis terhapus 30 hari setelah dipanggil. Disiplin SL menjaga modal.'}];
       var head='<thead><tr><th>'+col+'</th><th>Date Call</th><th>Buy Area</th><th>Last</th><th>TP 1</th><th>TP 2</th><th>TP 3</th><th>Base</th><th>%</th></tr></thead>';
-      function rh(r){ var fl=r[8]; var flc=(''+fl).charAt(0)==='-'?'neg':'pos';
-        return '<tr><td class="kode">'+esc(r[0])+'</td><td>'+esc(r[1])+'</td><td>'+esc(r[2])+'</td><td>'+esc(r[3])+'</td><td>'+esc(r[4])+'</td><td>'+esc(r[5])+'</td><td>'+esc(r[6])+'</td><td>'+esc(r[7])+'</td><td class="'+flc+'">'+esc(fl)+(window.MO_ADMIN?(' <span data-mo-del="'+esc(r[10])+'" style="color:#c0392b;cursor:pointer;font-weight:700">&times;</span>'):'')+'</td></tr>'; }
+      function cell(r,key){
+        var v=r[key]; v=(v==null?'':v);
+        if(window.MO_ADMIN && (key==='last'||key==='base')){
+          return '<td contenteditable="true" data-id="'+esc(r.id)+'" data-key="'+key+'" class="mo-edit" style="outline:none;background:#fffbea">'+esc(v)+'</td>';
+        }
+        return '<td>'+esc(v)+'</td>';
+      }
+      function rh(r){
+        var pct=(r.persen&&(''+r.persen).trim())?r.persen:pctOf(r.last,r.base);
+        var flc=(''+pct).charAt(0)==='-'?'neg':'pos';
+        return '<tr><td class="kode">'+esc(r.kode)+'</td><td>'+esc(r.date_call||'')+'</td><td>'+esc(r.buy_area||'')+'</td>'+
+          cell(r,'last')+'<td>'+esc(r.tp1==null?'':r.tp1)+'</td><td>'+esc(r.tp2==null?'':r.tp2)+'</td><td>'+esc(r.tp3==null?'':r.tp3)+'</td>'+
+          cell(r,'base')+'<td class="'+flc+'">'+esc(pct)+(window.MO_ADMIN?(' <span data-mo-tbl="data_overview" data-mo-del="'+esc(r.id)+'" style="color:#c0392b;cursor:pointer;font-weight:700">&times;</span>'):'')+'</td></tr>';
+      }
       var kind=track()==='forex'?'Fast Trade':'Swing';
-      var out='<div style="font-weight:800;color:var(--ink);font-size:16px;margin-bottom:4px">Rekap Kinerja '+kind+' &middot; '+esc(label)+'</div><p style="font-size:12.5px;color:#6b7686;margin:0 0 14px">Dipisah per status biar fokus. 100% sinkron dengan Sinyal '+(track()==='forex'?'Fast Trade':'Swing & Scalping')+' &amp; Edukasi Strategi.</p>';
-      for(var g=0;g<G.length;g++){ var gr=G[g]; var sub=data.filter(function(r){return r[9]===gr.k;});
+      var out='<div style="font-weight:800;color:var(--ink);font-size:16px;margin-bottom:4px">Rekap Kinerja '+kind+' &middot; '+esc(label)+'</div>'+
+        '<p style="font-size:12.5px;color:#6b7686;margin:0 0 14px">Dipisah per status biar fokus. '+(window.MO_ADMIN?'<b>Kolom Last &amp; Base bisa diklik &amp; diedit (kuning), % otomatis terhitung.</b>':'100% sinkron dengan Sinyal &amp; Edukasi Strategi.')+'</p>';
+      for(var g=0;g<G.length;g++){ var gr=G[g]; var sub=data.filter(function(r){return (r.status||'HOLD')===gr.k;});
         out+='<div class="card" style="padding:16px;margin-bottom:14px"><div style="display:flex;align-items:center;gap:9px;margin-bottom:10px"><span class="imp '+gr.c+'">'+gr.k+'</span><b style="color:var(--ink)">'+sub.length+' '+unit+'</b></div>';
         if(sub.length){ var t=''; for(var s=0;s<sub.length;s++) t+=rh(sub[s]); out+='<div style="overflow-x:auto"><table class="rk-tbl">'+head+'<tbody>'+t+'</tbody></table></div>'; }
         else { out+='<p style="font-size:12.5px;color:#9aa3b2;margin:2px 0">Tidak ada di status ini untuk periode ini.</p>'; }
         out+='<p style="font-size:12px;color:#6b7686;margin:11px 0 0;line-height:1.55"><b>Mekanisme:</b> '+gr.d+'</p></div>';
       }
-      box.innerHTML=out; wireDel(box,renderRekapDB);
+      box.innerHTML=out; wireDel(box,renderRekapDB); wireEdit(box);
     });
   }
+  function wireEdit(box){
+    if(!window.MO_ADMIN) return;
+    var cells=box.querySelectorAll('.mo-edit');
+    for(var i=0;i<cells.length;i++){
+      cells[i].onblur=function(){
+        var id=this.getAttribute('data-id'), key=this.getAttribute('data-key');
+        var val=parseFloat((this.textContent||'').replace(',','.')); if(isNaN(val))val=null;
+        var c=sb(); if(!c)return; var patch={}; patch[key]=val;
+        try{ c.from('data_overview').update(patch).eq('id',id).then(function(){ renderRekapDB(); })['catch'](function(){}); }catch(e){}
+      };
+    }
+  }
 
-  /* ---------- RISET FUNDAMENTAL (gambar 5) ---------- */
+  /* ---------- RISET FUNDAMENTAL ---------- */
   var COVERS=[['#3FC58C','#0C7E51'],['#E6C36A','#9C7220'],['#FF7F6B','#E14B36'],['#13A06A','#0C7E51'],['#C2922F','#9C7220']];
-  window._moRisetDB=[];
+  window._moRiset=[];
   function renderRisetDB(){
-    moFetch('fundamental').then(function(rows){
+    q('riset').then(function(rows){
       var g=document.getElementById('risetGrid'); if(!g) return;
+      rows=rows.filter(function(r){ return (r.track||'saham')===track(); });
       if(!rows.length) return;
-      window._moRisetDB=[];
-      var h='';
-      for(var i=0;i<rows.length;i++){ var x=rows[i]; var d=jparse(x.isi)||{};
-        var cov=COVERS[i%COVERS.length];
-        var tag=(d.tag==='premium')?'premium':'blog'; var tagTxt=(tag==='premium')?'Premium':'Blog';
-        var item={tk:(x.emiten||x.judul||'-'),title:(d.title||'Investasi Jangka Panjang'),vol:(d.vol||('Vol '+(rows.length-i))),tag:tag,sektor:(d.sektor||'-'),ket:(d.ket||x.judul||''),date:(d.date||fmtDate(x.created_at)),id:x.id};
-        window._moRisetDB.push(item);
-        h+='<button class="rcard" onclick="moOpenRiset('+i+')"><div class="rcover" style="background:linear-gradient(150deg,'+cov[0]+','+cov[1]+')"><div class="rc-in"><div class="rc-eyebrow">Tim MICRONE</div><div class="rc-title">'+esc(item.title)+'</div><span class="rc-vol">'+esc(item.vol)+'</span></div></div>'+
-          '<div class="rbody"><span class="rtag '+tag+'">'+tagTxt+'</span><div class="rname">'+esc(item.tk)+'</div><div class="rsekt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg> '+esc(item.sektor)+'</div><div class="rdate">Dibuat '+esc(item.date)+'</div></div></button>';
+      window._moRiset=rows; var h='';
+      for(var i=0;i<rows.length;i++){ var r=rows[i]; var cov=COVERS[i%COVERS.length];
+        var tag=(r.tag==='premium')?'premium':'blog'; var tagTxt=(tag==='premium')?'Premium':'Blog';
+        h+='<button class="rcard" onclick="moOpenRiset('+i+')"><div class="rcover" style="background:linear-gradient(150deg,'+cov[0]+','+cov[1]+')"><div class="rc-in"><div class="rc-eyebrow">Tim MICRONE</div><div class="rc-title">'+esc(r.judul||'Investasi Jangka Panjang')+'</div><span class="rc-vol">'+esc(r.vol||'')+'</span></div></div>'+
+          '<div class="rbody"><span class="rtag '+tag+'">'+tagTxt+'</span><div class="rname">'+esc(r.emiten)+'</div><div class="rsekt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg> '+esc(r.sektor||'-')+'</div><div class="rdate">Dibuat '+esc(r.tanggal||'')+'</div></div></button>';
       }
       g.innerHTML=h; g.setAttribute('data-rendered','1');
-      if(window.MO_ADMIN){
-        var bar=document.createElement('div'); bar.style.cssText='margin-top:8px;font-size:12px;color:#9aa3b2';
-        bar.textContent='Tip admin: buka kartu untuk melihat, hapus lewat Panel Admin.';
-        g.parentNode&&g.parentNode.appendChild(bar);
-      }
     });
   }
   window.moOpenRiset=function(i){
-    var arr=window._moRisetDB||[]; var r=arr[i]; if(!r) return;
+    var r=(window._moRiset||[])[i]; if(!r) return;
     var tagTxt=(r.tag==='premium')?'Premium':'Blog';
-    var body='<p><b>'+(track()==='forex'?'Instrumen':'Emiten')+':</b> '+esc(r.tk)+' &middot; '+esc(r.sektor)+'</p>';
-    if(r.ketFull){ body+='<div class="riset-detail">'+r.ketFull+'</div>'; }
-    body+='<p>'+esc(r.ket)+'</p><p style="font-size:13px;color:var(--muted)">Ringkasan ini disusun tim MICRONE. Bukan rekomendasi membeli atau menjual.</p>';
-    if(typeof window.openModal==='function') window.openModal(esc(r.tk)+' &middot; '+esc(r.title)+' '+esc(r.vol),tagTxt,body);
+    var body='<p><b>'+(track()==='forex'?'Instrumen':'Emiten')+':</b> '+esc(r.emiten)+' &middot; '+esc(r.sektor||'')+'</p>'+
+      '<p>'+esc(r.ringkasan||'')+'</p>'+
+      (window.MO_ADMIN?('<button type="button" onclick="moDelRiset(\''+esc(r.id)+'\')" style="background:#fdecea;color:#c0392b;border:none;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer">Hapus Riset</button>'):'')+
+      '<p style="font-size:13px;color:var(--muted)">Ringkasan disusun tim MICRONE. Bukan rekomendasi membeli atau menjual.</p>';
+    if(typeof window.openModal==='function') window.openModal(esc(r.emiten)+' &middot; '+esc(r.judul||'')+' '+esc(r.vol||''),tagTxt,body);
   };
+  window.moDelRiset=function(id){ if(!confirm('Hapus riset ini?'))return; delRow('riset',id,function(){ var m=document.querySelector('.modal-overlay,.mv-overlay'); if(m)m.remove(); renderRisetDB(); }); };
 
   /* ---------- install overrides ---------- */
+  var _sig,_rekap,_riset;
   function install(){
     if(typeof window.renderSig==='function' && window.renderSig!==wrapSig){ _sig=window.renderSig; window.renderSig=wrapSig; }
-    if(typeof window.renderScalp==='function' && window.renderScalp!==wrapScalp){ _scalp=window.renderScalp; }
     if(typeof window.renderRekap==='function' && window.renderRekap!==wrapRekap){ _rekap=window.renderRekap; window.renderRekap=wrapRekap; }
     if(typeof window.renderRiset==='function' && window.renderRiset!==wrapRiset){ _riset=window.renderRiset; window.renderRiset=wrapRiset; }
   }
-  function wrapSig(){ try{ if(_sig)_sig.apply(this,arguments); }catch(e){} renderSwingDB(); renderScalpDB(); }
-  function wrapScalp(){ var out=''; try{ if(_scalp)out=_scalp.apply(this,arguments); }catch(e){} renderScalpDB(); return out; }
+  function wrapSig(){ try{ if(_sig)_sig.apply(this,arguments); }catch(e){} renderSwingDB(); renderFastDB(); renderScalpDB(); }
   function wrapRekap(){ try{ if(_rekap)_rekap.apply(this,arguments); }catch(e){} renderRekapDB(); }
   function wrapRiset(){ try{ if(_riset)_riset.apply(this,arguments); }catch(e){} renderRisetDB(); }
+  function refreshAll(){ try{ renderSwingDB(); renderFastDB(); renderScalpDB(); renderRekapDB(); renderRisetDB(); }catch(e){} }
 
-  /* ---------- ADMIN: structured post panel ---------- */
+  /* ---------- ADMIN PANEL: Kelola Konten ---------- */
   function syncAdminUI(){
     var b=document.getElementById('moAdminFab');
     if(window.MO_ADMIN){
       if(!b){
-        b=document.createElement('button'); b.id='moAdminFab'; b.type='button';
-        b.innerHTML='\u2795 Kelola Konten';
+        b=document.createElement('button'); b.id='moAdminFab'; b.type='button'; b.innerHTML='\u2795 Kelola Konten';
         b.style.cssText='position:fixed;left:14px;bottom:64px;z-index:9998;background:linear-gradient(135deg,#0C7E51,#0A3A28);color:#fff;border:none;border-radius:30px;padding:11px 16px;font-weight:700;font-size:13px;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer';
         b.onclick=openMoAdmin; document.body.appendChild(b);
       } else b.style.display='block';
     } else if(b){ b.style.display='none'; }
   }
-  function inp(id,ph,val){ return '<input id="'+id+'" placeholder="'+ph+'" value="'+(val||'')+'" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px">'; }
+  function inp(id,ph){ return '<input id="'+id+'" placeholder="'+ph+'" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px">'; }
+  function ta(id,ph){ return '<textarea id="'+id+'" rows="3" placeholder="'+ph+'" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical"></textarea>'; }
+  function sel(id,opts){ var o=''; for(var i=0;i<opts.length;i++) o+='<option value="'+opts[i][0]+'">'+opts[i][1]+'</option>'; return '<select id="'+id+'" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px">'+o+'</select>'; }
   function lab(t,inner){ return '<label style="font-size:13px;font-weight:600;color:#333;display:block;margin-bottom:8px">'+t+inner+'</label>'; }
-  function val(id){ var e=document.getElementById(id); return e?e.value.trim():''; }
-  function setMoMsg(t,ok){ var e=document.getElementById('moMsg'); if(!e)return; e.style.display='block'; e.textContent=t; e.style.background=ok?'#e6f5ec':'#fdecea'; e.style.color=ok?'#1a7f4b':'#c0392b'; }
+  function val(id){ var e=document.getElementById(id); return e?(''+e.value).trim():''; }
+  function msg(t,ok){ var e=document.getElementById('moMsg'); if(!e)return; e.style.display='block'; e.textContent=t; e.style.background=ok?'#e6f5ec':'#fdecea'; e.style.color=ok?'#1a7f4b':'#c0392b'; }
+  function monthOpts(){ var a=[]; for(var i=0;i<MONTHS.length;i++) a.push([MONTHS[i],MONTHS[i]]); return a; }
 
-  function moFields(kat){
-    var monthOpts=''; for(var i=0;i<SIG_MONTHS.length;i++) monthOpts+='<option value="'+SIG_MONTHS[i]+'">'+SIG_MONTHS[i]+'</option>';
-    if(kat==='swing'){
-      return lab('Emiten / Kode',inp('mfEm','cth: BBRI'))+
-        lab('Area Beli',inp('mfBuy','cth: 5.600 – 5.680'))+
-        lab('Target (TP)',inp('mfTp','cth: 6.000 – 6.350'))+
-        lab('Stop Loss',inp('mfSl','cth: &lt; 5.500'))+
-        lab('Status','<select id="mfSt" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"><option value="open">AKTIF</option><option value="watch">PANTAU</option><option value="hit">HIT TARGET</option></select>')+
-        lab('Bulan','<select id="mfBulan" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px">'+monthOpts+'</select>')+
-        lab('Alasan singkat','<textarea id="mfAl" rows="3" placeholder="cth: Akumulasi terlihat menjelang rilis kinerja." style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical"></textarea>');
+  function fields(kind){
+    if(kind==='swing'){
+      return lab('Emiten',inp('f_em','cth: DEWA'))+
+        lab('Status',sel('f_st',[['open','AKTIF'],['watch','PANTAU'],['hit','HIT TARGET']]))+
+        lab('Bulan',sel('f_bln',monthOpts()))+ lab('Tahun',inp('f_thn','2026'))+
+        lab('Tanggal (tampil di kartu)',inp('f_tgl','cth: 10 Des 2026'))+
+        lab('Area Beli',inp('f_buy','cth: 267 - 288'))+
+        lab('Target',inp('f_tp','cth: 335 - 429'))+
+        lab('Stop Loss',inp('f_sl','cth: < 243'))+
+        lab('Alasan',ta('f_al','cth: Akumulasi terlihat menjelang rilis kinerja.'));
     }
-    if(kat==='scalping'){
-      return lab('Daftar Emiten (pisah dengan koma)','<textarea id="mfList" rows="3" placeholder="cth: MINA, NRCA, KETR, AYAM, ANTM" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical"></textarea>')+
-        lab('Tanggal pantauan',inp('mfDate','cth: Senin, 18 November 2025'));
+    if(kind==='forex'){
+      return lab('Pair',inp('f_pair','cth: XAU/USD'))+
+        lab('Status',sel('f_st',[['open','AKTIF'],['tp1','TP1 Tercapai'],['tp2','TP2 Tercapai'],['tp3','TP3 / Semua TP'],['sl','Stop Loss']]))+
+        lab('Bulan',sel('f_bln',monthOpts()))+ lab('Tahun',inp('f_thn','2026'))+
+        lab('Tanggal',inp('f_tgl','cth: 18 Jan 2026'))+
+        lab('Entry',inp('f_entry','cth: 2.600 - 2.619'))+
+        '<div style="display:flex;gap:8px">'+lab('TP 1',inp('f_tp1','2.633'))+lab('TP 2',inp('f_tp2','2.650'))+lab('TP 3',inp('f_tp3','2.672'))+'</div>'+
+        lab('Stop Loss',inp('f_sl','cth: < 2.570'))+
+        lab('Alasan',ta('f_al','cth: Konsolidasi menjelang rilis data penting.'));
     }
-    if(kat==='fundamental'){
-      return lab('Emiten / Kode',inp('mfEm','cth: TPMA'))+
-        lab('Sektor',inp('mfSekt','cth: Pelayaran'))+
-        lab('Volume / Edisi',inp('mfVol','cth: Vol 5'))+
-        lab('Tipe','<select id="mfTag" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"><option value="premium">Premium</option><option value="blog">Blog</option></select>')+
-        lab('Ringkasan','<textarea id="mfKet" rows="3" placeholder="cth: Kinerja solid, arus kas sehat." style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical"></textarea>');
+    if(kind==='scalping'){
+      return lab('Kelas',sel('f_trk',[['saham','Saham'],['forex','Forex']]))+
+        lab('Tanggal',inp('f_tgl','cth: Senin, 18 November 2025'))+
+        lab('Daftar emiten (pisah koma)',ta('f_list','cth: MINA, NRCA, KETR, AYAM, ANTM'));
     }
-    /* overview */
-    return lab('Kode / Pair',inp('mfEm','cth: BUVA'))+
-      lab('Date Call',inp('mfDate','cth: 19-Sep-25'))+
-      lab('Buy Area',inp('mfBuy','cth: 444-458'))+
-      lab('Last',inp('mfLast','cth: 1685'))+
-      '<div style="display:flex;gap:8px">'+lab('TP 1',inp('mfTp1','540'))+lab('TP 2',inp('mfTp2','685'))+lab('TP 3',inp('mfTp3','950'))+'</div>'+
-      lab('Base',inp('mfBase','950'))+
-      lab('% (untung/rugi)',inp('mfPct','cth: 267,90% atau -3,95%'))+
-      lab('Status','<select id="mfStO" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"><option value="AREA BUY">AREA BUY</option><option value="PROFIT RUN">PROFIT RUN</option><option value="HOLD" selected>HOLD</option><option value="SL HIT">SL HIT</option></select>')+
-      lab('Periode','<select id="mfPer" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"><option value="q1">Jan–Mar</option><option value="q2">Apr–Jun</option><option value="q3">Jul–Sep</option><option value="q4" selected>Okt–Des</option></select>');
+    if(kind==='overview'){
+      return lab('Kelas',sel('f_trk',[['saham','Saham'],['forex','Forex']]))+
+        lab('Kode / Pair',inp('f_kode','cth: BUVA'))+
+        lab('Date Call',inp('f_date','cth: 19-Sep-25'))+
+        lab('Buy Area',inp('f_buy','cth: 444-458'))+
+        lab('Last (harga terbaru)',inp('f_last','cth: 1685'))+
+        '<div style="display:flex;gap:8px">'+lab('TP 1',inp('f_tp1','540'))+lab('TP 2',inp('f_tp2','685'))+lab('TP 3',inp('f_tp3','950'))+'</div>'+
+        lab('Base (harga dasar)',inp('f_base','cth: 950'))+
+        lab('% (kosongkan = hitung otomatis dari Last vs Base)',inp('f_pct','boleh kosong'))+
+        lab('Status',sel('f_st',[['AREA BUY','AREA BUY'],['PROFIT RUN','PROFIT RUN'],['HOLD','HOLD'],['SL HIT','SL HIT']]))+
+        lab('Periode',sel('f_per',[['q1','Jan–Mar'],['q2','Apr–Jun'],['q3','Jul–Sep'],['q4','Okt–Des']]))+
+        lab('Tahun',inp('f_thn','2025'));
+    }
+    /* riset */
+    return lab('Kelas',sel('f_trk',[['saham','Saham'],['forex','Forex']]))+
+      lab('Emiten',inp('f_em','cth: TPMA'))+
+      lab('Sektor',inp('f_sekt','cth: Pelayaran'))+
+      lab('Volume / Edisi',inp('f_vol','cth: Vol 5'))+
+      lab('Tipe',sel('f_tag',[['premium','Premium'],['blog','Blog']]))+
+      lab('Tanggal',inp('f_tgl','cth: 12 Feb 2026'))+
+      lab('Ringkasan',ta('f_ket','cth: Kinerja solid, arus kas sehat.'));
   }
-
-  function refreshFields(){
-    var host=document.getElementById('moFields'); if(!host) return;
-    var kat=val('moKat'); host.innerHTML=moFields(kat);
-  }
+  function refreshFields(){ var h=document.getElementById('moFields'); if(h) h.innerHTML=fields(val('moKind')); }
 
   function openMoAdmin(){
     var o=document.getElementById('moAdminOv');
@@ -3323,10 +3371,9 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
       o.innerHTML='<div style="background:#fff;max-width:560px;width:100%;border-radius:16px;padding:20px;margin:24px 0;box-shadow:0 20px 60px rgba(0,0,0,.3)">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><h2 style="margin:0;font-size:20px;color:#0C7E51">Kelola Konten</h2>'+
         '<button type="button" id="moClose" style="background:#eee;border:none;border-radius:8px;width:32px;height:32px;font-size:16px;cursor:pointer">&times;</button></div>'+
-        '<p style="font-size:12px;color:#777;margin:0 0 14px">Isi form, lalu Posting. Hasilnya langsung tampil cantik di halaman member (Swing / Scalping / Data Overview / Riset) persis seperti contoh.</p>'+
+        '<p style="font-size:12px;color:#777;margin:0 0 14px">Isi DATA saja. Setelah Posting, kartu premium (kotak merah) muncul otomatis di halaman member.</p>'+
         '<div style="display:grid;gap:10px">'+
-          lab('Kelas','<select id="moTrack" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"><option value="saham">Saham</option><option value="forex">Forex</option></select>')+
-          lab('Jenis Konten','<select id="moKat" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"><option value="swing">Sinyal Swing (gbr 2)</option><option value="scalping">Sinyal Scalping (gbr 3)</option><option value="overview">Data Overview (gbr 4)</option><option value="fundamental">Riset Fundamental (gbr 5)</option></select>')+
+          lab('Jenis Konten',sel('moKind',[['swing','Sinyal Swing Saham'],['forex','Fast Trade Forex'],['scalping','Sinyal Scalping'],['overview','Data Overview'],['riset','Riset Fundamental']]))+
           '<div id="moFields"></div>'+
           '<button type="button" id="moPost" style="background:linear-gradient(135deg,#0C7E51,#0A3A28);color:#fff;border:none;border-radius:10px;padding:13px;font-weight:700;font-size:15px;cursor:pointer">Posting</button>'+
           '<div id="moMsg" style="font-size:13px;display:none;padding:8px;border-radius:8px"></div>'+
@@ -3334,8 +3381,7 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
       document.body.appendChild(o);
       document.getElementById('moClose').onclick=function(){ o.style.display='none'; };
       o.onclick=function(e){ if(e.target===o) o.style.display='none'; };
-      document.getElementById('moKat').onchange=refreshFields;
-      var tr=document.getElementById('moTrack'); if(tr&&window.memberTrack)tr.value=window.memberTrack;
+      document.getElementById('moKind').onchange=refreshFields;
       document.getElementById('moPost').onclick=moPost;
       refreshFields();
     }
@@ -3343,35 +3389,36 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
   }
 
   function moPost(){
-    var c=sb(); if(!c){ setMoMsg('Koneksi belum siap.'); return; }
-    var trk=val('moTrack'), kat=val('moKat');
-    var emiten='', judul='', data={};
-    if(kat==='swing'){
-      emiten=val('mfEm'); if(!emiten){ setMoMsg('Emiten wajib diisi.'); return; }
-      data={buy:val('mfBuy'),tp:val('mfTp'),sl:val('mfSl'),st:val('mfSt'),bulan:val('mfBulan'),al:val('mfAl')};
-      judul='Swing '+emiten;
-    } else if(kat==='scalping'){
-      var listRaw=val('mfList'); if(!listRaw){ setMoMsg('Daftar emiten wajib diisi.'); return; }
-      var list=listRaw.split(',').map(function(s){return s.trim();}).filter(function(s){return s;});
-      data={list:list,date:val('mfDate')}; judul='Scalping '+(list[0]||''); emiten=list[0]||'';
-    } else if(kat==='fundamental'){
-      emiten=val('mfEm'); if(!emiten){ setMoMsg('Emiten wajib diisi.'); return; }
-      data={sektor:val('mfSekt'),vol:val('mfVol'),tag:val('mfTag'),ket:val('mfKet'),title:(trk==='forex'?'Analisa & Outlook':'Investasi Jangka Panjang')};
-      judul='Riset '+emiten;
+    var c=sb(); if(!c){ msg('Koneksi belum siap.'); return; }
+    var kind=val('moKind'); var table,row;
+    if(kind==='swing'){
+      if(!val('f_em')){ msg('Emiten wajib diisi.'); return; }
+      table='signals_swing';
+      row={emiten:val('f_em'),status:val('f_st'),bulan:val('f_bln'),tahun:parseInt(val('f_thn')||'2026',10),tanggal:val('f_tgl'),area_beli:val('f_buy'),target:val('f_tp'),stop_loss:val('f_sl'),alasan:val('f_al')};
+    } else if(kind==='forex'){
+      if(!val('f_pair')){ msg('Pair wajib diisi.'); return; }
+      table='signals_forex';
+      row={pair:val('f_pair'),status:val('f_st'),bulan:val('f_bln'),tahun:parseInt(val('f_thn')||'2026',10),tanggal:val('f_tgl'),entry:val('f_entry'),tp1:val('f_tp1'),tp2:val('f_tp2'),tp3:val('f_tp3'),stop_loss:val('f_sl'),alasan:val('f_al')};
+    } else if(kind==='scalping'){
+      if(!val('f_list')){ msg('Daftar emiten wajib diisi.'); return; }
+      table='signals_scalping';
+      row={track:val('f_trk'),tanggal:val('f_tgl'),emiten_list:val('f_list')};
+    } else if(kind==='overview'){
+      if(!val('f_kode')){ msg('Kode wajib diisi.'); return; }
+      table='data_overview';
+      row={track:val('f_trk'),kode:val('f_kode'),date_call:val('f_date'),buy_area:val('f_buy'),last:num(val('f_last')),tp1:num(val('f_tp1')),tp2:num(val('f_tp2')),tp3:num(val('f_tp3')),base:num(val('f_base')),persen:val('f_pct'),status:val('f_st'),periode:val('f_per'),tahun:parseInt(val('f_thn')||'2025',10)};
     } else {
-      emiten=val('mfEm'); if(!emiten){ setMoMsg('Kode wajib diisi.'); return; }
-      data={date:val('mfDate'),buy:val('mfBuy'),last:val('mfLast'),tp1:val('mfTp1'),tp2:val('mfTp2'),tp3:val('mfTp3'),base:val('mfBase'),pct:val('mfPct')||'0%',st:val('mfStO'),periode:val('mfPer'),tahun:'2025'};
-      judul='Overview '+emiten;
+      if(!val('f_em')){ msg('Emiten wajib diisi.'); return; }
+      table='riset';
+      row={track:val('f_trk'),emiten:val('f_em'),sektor:val('f_sekt'),vol:val('f_vol'),tag:val('f_tag'),judul:(val('f_trk')==='forex'?'Analisa & Outlook':'Investasi Jangka Panjang'),ringkasan:val('f_ket'),tanggal:val('f_tgl'),tahun:2026};
     }
-    setMoMsg('Menyimpan...',true);
-    var payload={track:trk,kategori:kat,judul:judul,emiten:emiten,isi:JSON.stringify(data),status:'tayang'};
+    msg('Menyimpan...',true);
     try{
-      c.from('signals').insert(payload).then(function(r){
-        if(r.error){ setMoMsg('Gagal simpan: '+(r.error.message||'')); return; }
-        setMoMsg('Tersimpan! Cek halaman member.',true);
-        if(kat==='swing'){ renderSwingDB(); } else if(kat==='scalping'){ renderScalpDB(); } else if(kat==='overview'){ renderRekapDB(); } else { renderRisetDB(); }
-      })['catch'](function(e){ setMoMsg('Gagal: '+(e&&e.message||'')); });
-    }catch(e){ setMoMsg('Gagal: '+(e&&e.message||'')); }
+      c.from(table).insert(row).then(function(r){
+        if(r.error){ msg('Gagal simpan: '+(r.error.message||'')); return; }
+        msg('Tersimpan! Cek halaman member.',true); refreshAll();
+      })['catch'](function(e){ msg('Gagal: '+(e&&e.message||'')); });
+    }catch(e){ msg('Gagal: '+(e&&e.message||'')); }
   }
 
   /* ---------- admin detection ---------- */
@@ -3382,27 +3429,23 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
         var uid=(((u.data||{}).user)||{}).id;
         if(!uid){ window.MO_ADMIN=false; syncAdminUI(); return; }
         c.from('profiles').select('is_admin').eq('id',uid).single().then(function(p){
-          window.MO_ADMIN=!!((p.data||{}).is_admin); syncAdminUI();
-          /* refresh current view so admin controls + data appear */
-          try{ if(typeof window.renderSig==='function'){ renderSwingDB(); renderScalpDB(); } renderRekapDB(); renderRisetDB(); }catch(e){}
+          window.MO_ADMIN=!!((p.data||{}).is_admin); syncAdminUI(); refreshAll();
         })['catch'](function(){ window.MO_ADMIN=false; syncAdminUI(); });
       })['catch'](function(){});
     }catch(e){}
   }
 
-  /* ---------- boot ---------- */
   function boot(){
-    install();
-    setInterval(install,1500); /* jaga-jaga kalau render fns didefinisikan belakangan */
+    install(); setInterval(install,1500);
     checkAdmin();
     try{ var c=sb(); if(c&&c.auth&&c.auth.onAuthStateChange){ c.auth.onAuthStateChange(function(){ setTimeout(checkAdmin,500); }); } }catch(e){}
-    /* render data untuk member non-admin juga */
-    setTimeout(function(){ try{ renderSwingDB(); renderScalpDB(); renderRekapDB(); renderRisetDB(); }catch(e){} },1500);
+    setTimeout(refreshAll,1500);
   }
   if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',function(){ setTimeout(boot,400); }); }
   else { setTimeout(boot,400); }
 })();
 
 </script>
+<style id="screen-guard">.screen:not(.active){display:none!important}</style>
 </body>
 </html>
