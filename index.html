@@ -1390,7 +1390,7 @@ function doLogout(){closeDrawer();showScreen('landing');}
 
 /* ============ MEMBER VIEWS ============ */
 function showView(view){
-  if(view==='komunitas'||view==='jurnal'||view==='passport'){ view='dashboard'; }
+  if(view==='komunitas'||view==='passport'){ view='dashboard'; }
   var views=document.querySelectorAll('#screen-app .view');
   for(var i=0;i<views.length;i++)views[i].classList.remove('active');
   var target=document.getElementById('view-'+view);if(target)target.classList.add('active');
@@ -1490,7 +1490,7 @@ var DEMO_EMAIL='microone25@gmail.com',DEMO_PASS='demo1234';
 function tryLogin(){var em=((document.getElementById('loginEmail')||{}).value||'').trim().toLowerCase();var pw=((document.getElementById('loginPass')||{}).value||'');var err=document.getElementById('loginErr');{ if(err)err.style.display='block'; }}
 function hideDemoMenus(){
   try{
-    var v=['komunitas','jurnal','passport'];
+    var v=['komunitas','passport'];
     var nodes=document.querySelectorAll('#screen-app [onclick]');
     for(var i=0;i<nodes.length;i++){
       var oc=nodes[i].getAttribute('onclick')||'';
@@ -2864,7 +2864,7 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
   };
   window.sbLogout=function(){ try{ if(sbc)sbc.auth.signOut(); }catch(e){} };
   function wire(){
-    if(!document.getElementById('verTag')){ var _v=document.createElement('div'); _v.id='verTag'; _v.textContent='v50'; _v.style.cssText='position:fixed;right:6px;bottom:4px;z-index:99999;font-size:10px;color:#bbb;opacity:.7;pointer-events:none'; document.body.appendChild(_v); }
+    if(!document.getElementById('verTag')){ var _v=document.createElement('div'); _v.id='verTag'; _v.textContent='v51'; _v.style.cssText='position:fixed;right:6px;bottom:4px;z-index:99999;font-size:10px;color:#bbb;opacity:.7;pointer-events:none'; document.body.appendChild(_v); }
     var card=document.querySelector('#screen-login .login-card');
     if(false){
       var t=document.createElement('div');
@@ -2950,7 +2950,7 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
         o=document.createElement('div'); o.id='adminOv';
         o.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(15,22,40,.55);overflow:auto;padding:16px;display:flex;align-items:flex-start;justify-content:center';
         o.innerHTML='<div style="background:#fff;max-width:560px;width:100%;border-radius:16px;padding:20px;margin:24px 0;box-shadow:0 20px 60px rgba(0,0,0,.3)">'+
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:20px;color:#1F3D73">Panel Admin <span style="font-size:11px;color:#9C7220;font-weight:400">v50</span></h2>'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:20px;color:#1F3D73">Panel Admin <span style="font-size:11px;color:#9C7220;font-weight:400">v51</span></h2>'+
           '<button type="button" id="admClose" style="background:#eee;border:none;border-radius:8px;width:32px;height:32px;font-size:16px;cursor:pointer">&times;</button></div>'+
           '<div style="background:#f0f4fb;border-radius:10px;padding:10px;margin-bottom:14px"><div style="font-size:12px;color:#555;margin-bottom:6px;font-weight:600">Lihat member area sebagai:</div><div style="display:flex;gap:8px"><button type="button" id="vaSaham" style="flex:1;padding:9px;border:1px solid #1F3D73;background:#1F3D73;color:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Saham</button><button type="button" id="vaForex" style="flex:1;padding:9px;border:1px solid #1F3D73;background:#fff;color:#1F3D73;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Forex</button></div></div>'+'<button type="button" id="admGantiPw" style="width:100%;padding:10px;border:1px solid #C2922F;background:#fff;color:#9C7220;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:14px">Ganti Sandi Saya (tanpa email)</button>'+'<div style="background:#fff7e6;border:1px solid #f0e0b8;border-radius:10px;padding:12px;font-size:12.5px;color:#7a5b00;line-height:1.55;margin-bottom:4px">Untuk posting <b>Sinyal, Data Overview &amp; Riset</b>, gunakan tombol <b>Kelola Konten</b> di menu admin. Panel ini cukup untuk ganti tampilan kelas &amp; ganti sandi.</div>'+'<div style="display:none">'+
           '<label style="font-size:13px;font-weight:600;color:#333">Kelas<select id="admTrack" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"><option value="saham">Saham</option><option value="forex">Forex</option></select></label>'+'<label style="font-size:13px;font-weight:600;color:#333">Kategori<select id="admKat" style="width:100%;margin-top:4px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:14px"><option value="swing">Sinyal Swing</option><option value="scalping">Sinyal Scalping</option><option value="fundamental">Riset Fundamental</option></select></label>'+
@@ -3453,7 +3453,7 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,te
         lab('Last / Harga Terbaru (boleh sama dengan Base)',inp('f_last','cth: 458'))+
         lab('SL Awal (harga)',inp('f_slx','cth: 420'))+
         '<div style="display:flex;gap:8px">'+lab('TP 1',inp('f_tp1','540'))+lab('TP 2',inp('f_tp2','685'))+lab('TP 3',inp('f_tp3','950'))+'</div>'+
-        lab('PIPS forex (opsional, kosong = auto)',inp('f_pips','boleh kosong'))+
+        (window.memberTrack==='forex'?lab('PIPS forex (opsional, kosong = auto)',inp('f_pips','boleh kosong')):'')+
         lab('Status awal',sel('f_st',[['area_buy','Area Buy'],['hold','Hold'],['tp1','TP1 Hit'],['tp2','TP2 Hit'],['tp3','TP3 / Realized'],['ts','Trailing Stop'],['sl','Stop Loss']]))+
         lab('Periode',sel('f_per',[['q1','Jan\u2013Mar'],['q2','Apr\u2013Jun'],['q3','Jul\u2013Sep'],['q4','Okt\u2013Des']]))+
         lab('Tahun',inp('f_thn','2025'));
